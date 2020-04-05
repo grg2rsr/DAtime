@@ -60,8 +60,11 @@ with open(neo_path,'rb') as fH:
 estimate firing rates for the entire recording
 -> all units in SpikeTrains, which are all accepted units after KS
 """
-sigma = analysis_params.gk_sigma * pq.ms
-fr_opts = dict(sampling_period=5*pq.ms, kernel=ele.kernels.GaussianKernel(sigma=sigma))
+sigma = analysis_params.k_sigma * pq.ms
+kernel = ele.kernels.GaussianKernel(sigma=sigma)
+from CausalAlphaKernel import CausalAlphaKernel
+kernel = CausalAlphaKernel(sigma)
+fr_opts = dict(sampling_period=5*pq.ms, kernel=kernel)
 
 for St in tqdm(Seg.spiketrains):
     frate = ele.statistics.instantaneous_rate(St,**fr_opts)
@@ -74,45 +77,6 @@ with open(neo_path.with_suffix('.neo.zfr'), 'wb') as fH:
     print("writing Seg with firing rates ... ")
     pickle.dump(Seg,fH)
     print("...done")
-
-# %% or load previous
-with open(neo_path.with_suffix('.neo.zfr'), 'rb') as fH:
-    Seg = pickle.load(fH)
-"""
- 
-   _                           _   
-  (_)_ __  ___ _ __   ___  ___| |_ 
-  | | '_ \/ __| '_ \ / _ \/ __| __|
-  | | | | \__ \ |_) |  __/ (__| |_ 
-  |_|_| |_|___/ .__/ \___|\___|\__|
-              |_|                  
- 
-"""
-# %% briefly inspect
-i = 3
-window = (-1,3) * pq.s
-t = Seg.events[0].times[i]
-t_slice = window + t
-s = Seg.time_slice(*t_slice)
-
-fig, axes = plt.subplots()
-
-ysep = 0.5*pq.dimensionless
-for i,asig in enumerate(s.analogsignals):
-    axes.plot(asig.times.rescale('s'),asig+ysep*i,color='k',alpha=0.5,lw=0.75)
-
-for epoch in s.epochs:
-    if epoch.annotations['label'] == 'VPL_stims':
-        color = 'firebrick'
-    else:
-        color = 'darkcyan'
-
-    for i in range(epoch.times.shape[0]):
-        t = epoch.times[i]
-        dur = epoch.durations[i]
-        axes.axvspan(t,t+dur,color=color,alpha=0.5)
-
-
 
 """
  
@@ -180,9 +144,67 @@ with open(neo_path.with_suffix('.neo.zfr.sliced'), 'wb') as fH:
  
 """
 
-# %% for testing purposes
+
+# %% loading previous
+with open(neo_path.with_suffix('.neo.zfr'), 'rb') as fH:
+    Seg = pickle.load(fH)
+
+
+# %% loading sliced frates
 with open(neo_path.with_suffix('.neo.zfr.sliced'), 'rb') as fH:
     Segs = pickle.load(fH)
+
+
+"""
+ 
+   _                           _   
+  (_)_ __  ___ _ __   ___  ___| |_ 
+  | | '_ \/ __| '_ \ / _ \/ __| __|
+  | | | | \__ \ |_) |  __/ (__| |_ 
+  |_|_| |_|___/ .__/ \___|\___|\__|
+              |_|                  
+ 
+"""
+# %% inspect a segment
+i = 3
+window = (-1,3) * pq.s
+t = Seg.events[0].times[i]
+t_slice = window + t
+s = Seg.time_slice(*t_slice)
+
+fig, axes = plt.subplots()
+
+ysep = 0.5*pq.dimensionless
+for i,asig in enumerate(s.analogsignals):
+    axes.plot(asig.times.rescale('s'),asig+ysep*i,color='k',alpha=0.5,lw=0.75)
+
+for epoch in s.epochs:
+    if epoch.annotations['label'] == 'VPL_stims':
+        color = 'firebrick'
+    else:
+        color = 'darkcyan'
+
+    for i in range(epoch.times.shape[0]):
+        t = epoch.times[i]
+        dur = epoch.durations[i]
+        axes.axvspan(t,t+dur,color=color,alpha=0.5)
+
+# %% check kernel asymmetry
+# seems to work nicely!
+i = 1
+window = (-1,3) * pq.s
+t = Seg.events[0].times[i]
+t_slice = window + t
+s = Seg.time_slice(*t_slice)
+
+j = 1 # unit
+asig = s.analogsignals[j]
+st = s.spiketrains[j]
+
+fig, axes = plt.subplots()
+axes.plot(asig.times,asig)
+for t in st.times:
+    axes.axvline(t,color='k',alpha=0.5,lw=1)
 
 
 # %% inspection

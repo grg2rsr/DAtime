@@ -56,7 +56,7 @@ stim_map_path = folder / analysis_params.stim_map_file
 StimMap = pd.read_csv(stim_map_path, delimiter=',')
 StimsDf = pd.read_csv(stim_path, delimiter=',')
 
-# %% # reformatting from new data format 
+# reformatting from new data format 
 nUnits = len(Segs[0].spiketrains)
 nTrials = len(Segs)
 
@@ -64,8 +64,7 @@ Rates = sp.zeros((nUnits,nTrials),dtype='object')
 for j in range(nTrials):
     Rates[:,j] = Segs[j].analogsignals
 
-# %% selection
-
+# %% stimulus selection
 stim_k = 1 # the stim to analyze 
 stim_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'red')).index
 Rates_ = Rates[:,stim_inds]
@@ -79,49 +78,29 @@ nUnits = Rates_.shape[0]
 # keep an epoch
 vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
 
-# %% inspect this
-# plot average rates
 
-# vpl data
+# %% STR vs CX 
+# FIXME this requires going back all the way
+Sts = Segs[0].spiketrains
+d = [st.annotations['depth'] - 4000 for st in Sts]
+depth_sep = -1700
+
+for st in Sts:
+    depth = st.annotations['depth'] - 4000
+    if depth < depth_sep:
+        st.annotate(area='STR')
+    else:
+        st.annotate(area='CX')
+
+str_inds = sp.where([s.annotations['area'] == 'STR' for s in Segs[0].spiketrains])[0]
+cx_inds = sp.where([s.annotations['area'] == 'CX' for s in Segs[0].spiketrains])[0]
+
+Rates_ = Rates_[str_inds,:]
+Rates_opto_ = Rates_opto_[str_inds,:]
+
+nTrials = stim_inds.shape[0]
 nUnits = Rates_.shape[0]
-r_avgs = sp.zeros((Rates_[0,0].shape[0],nUnits))
-for u in range(nUnits):
-    r = average_asigs(Rates_[u,:])
-    r_avgs[:,u] = r.magnitude.flatten()
 
-inds = sp.argsort(sp.argmax(r_avgs,0))[::-1]
-ext = (r.times[0],r.times[-1],0,nUnits)
-plt.matshow(r_avgs.T[inds,:],origin='bottom',extent=ext,vmin=-1,vmax=3)
-plt.gca().set_aspect('auto')
-add_stim(plt.gca(),vpl_stim)
-
-# opto data
-nUnits = Rates_opto_.shape[0]
-r_avgs_opto = sp.zeros((Rates_opto_[0,0].shape[0],nUnits))
-for u in range(nUnits):
-    r = average_asigs(Rates_opto_[u,:])
-    r_avgs_opto[:,u] = r.magnitude.flatten()
-
-# inds = sp.argsort(sp.argmax(r_avgs,0))
-ext = (r.times[0],r.times[-1],0,nUnits)
-plt.matshow(r_avgs_opto.T[inds,:],origin='bottom',extent=ext,vmin=-1,vmax=3)
-plt.gca().set_aspect('auto')
-add_stim(plt.gca(),vpl_stim)
-
-D = r_avgs_opto - r_avgs
-v = 2
-plt.matshow(D.T[inds,:],origin='bottom',extent=ext,vmin=-v,vmax=v,cmap='PiYG')
-plt.gca().set_aspect('auto')
-add_stim(plt.gca(),vpl_stim)
-
-# %% 
-fig, axes = plt.subplots()
-colors = sns.color_palette('viridis',n_colors=nUnits)
-ysep = 0.2
-tvec = Rates_[0,0].times.magnitude.flatten()
-for u in range(nUnits):
-    axes.plot(r_avgs[:,inds[u]]+u*ysep,color=colors[u],zorder=-1*u)
-    # axes.fill_between(tvec,r_avgs[:,inds[u]]+u*ysep,u*ysep,color=colors[u],zorder=-1*u)
 
 """
  
@@ -304,8 +283,8 @@ else:
 Rates_split = sp.split(Rates_cut,k,1)
 
 # decoding times
-dt = 0.01
-tt_dc = sp.arange(0.4,2.95,dt)
+dt = 0.005
+tt_dc = sp.arange(-0.25,3.25,dt)
 
 # firing rate vector and binning
 dr = 0.1
@@ -315,7 +294,7 @@ Ls_avgs = sp.zeros((tt_dc.shape[0],tt_dc.shape[0],k))
 Ls_opto_avgs = sp.zeros((tt_dc.shape[0],tt_dc.shape[0],k))
 
 tstart = time()
-tloops = []
+ts_loop = []
 for ki in range(k):
     ti1 = time()
     Rates_test = Rates_split[ki]
@@ -342,9 +321,10 @@ for ki in range(k):
 
     # timeit
     ti2 = time()
-    tloop = ti2-ti1
-    tloops.append(tloop)
-    print("loop time: %5.1f, left: %5.1f, rss/n: %8.4f, t_err: %8.4f" % (tloop, (k-ki-1)*sp.average(tloops), rss_avg, t_err))
+    t_loop = ti2-ti1
+    ts_loop.append(t_loop)
+    t_remain = (k-ki-1)*sp.average(ts_loop)
+    print("loop time: %5.1f, left: %5.1fs = %3.1fm, rss/n: %8.4f, t_err: %8.4f" % (t_loop, t_remain, t_remain/60, rss_avg, t_err))
 
 tfin = time()
 print("total runtime: ", tfin-tstart)
@@ -353,19 +333,48 @@ Ls_avg = sp.average(Ls_avgs,axis=2)
 tt_decoded = tt_dc[sp.argmax(Ls_avg,axis=1)]
 rss = sp.sum((tt_decoded - tt_dc)**2)
 print("error from avg: ", rss/tt_dc.shape[0])
-# sp.save('decoder_out_kde_20units_001.npy',Ls_avgs)
+
+out_path = bin_file.with_suffix('.decoder.str.k%1d.dt=%.3f.npy'%(stim_k,dt))
+sp.save(out_path,Ls_avgs)
+
+out_path = bin_file.with_suffix('.decoder.str.k%1d.dt=%.3f.npy'%(stim_k,dt))
+sp.save(out_path,Ls_opto_avgs)
+
 
 """
  
-         _     
-  __   _(_)___ 
-  \ \ / / / __|
-   \ V /| \__ \
-    \_/ |_|___/
-               
+       _                  
+    __| | ___  _ __   ___ 
+   / _` |/ _ \| '_ \ / _ \
+  | (_| | (_) | | | |  __/
+   \__,_|\___/|_| |_|\___|
+                          
  
 """
-# %%
+
+# %% load
+
+path = bin_file.with_suffix('.decoder.str.k%1d.npy'%stim_k)
+Ls_avgs = sp.load(path)
+
+path = bin_file.with_suffix('.decoder.str.opto.k%1d.npy'%stim_k)
+Ls_opto_avgs = sp.load(path)
+
+
+
+
+
+"""
+ 
+       _                    _                   _     
+    __| | ___  ___ ___   __| | ___ _ __  __   _(_)___ 
+   / _` |/ _ \/ __/ _ \ / _` |/ _ \ '__| \ \ / / / __|
+  | (_| |  __/ (_| (_) | (_| |  __/ |     \ V /| \__ \
+   \__,_|\___|\___\___/ \__,_|\___|_|      \_/ |_|___/
+                                                      
+ 
+"""
+# %% 
  
 Ls_avg = sp.average(Ls_avgs,axis=2)
 Ls_opto_avg = sp.average(Ls_opto_avgs,axis=2)
@@ -390,9 +399,19 @@ fig.colorbar(im,cax=axes[1,1],**kw_bar)
 im = axes[0,2].matshow(Ls_D.T,**kw_D)
 fig.colorbar(im,cax=axes[1,2],orientation="horizontal",label="stim - no stim", shrink=0.8)
 
+# axes[0,0].plot(tt_dc,tt_dc,':',lw=2, color='w')
+# axes[0,1].plot(tt_dc,tt_dc,':',lw=2, color='w')
+# axes[0,2].plot(tt_dc,tt_dc,':',lw=2, color='k')
+
 axes[0,0].set_title('decoding VPL only')
 axes[0,1].set_title('decoding VPL+SNc stim')
 axes[0,2].set_title('difference')
+
+axes[0,0].get_shared_x_axes().join(axes[0,0], axes[0,1])
+axes[0,0].get_shared_x_axes().join(axes[0,0], axes[0,2])
+
+axes[0,0].get_shared_y_axes().join(axes[0,0], axes[0,1])
+axes[0,0].get_shared_y_axes().join(axes[0,0], axes[0,2])
 
 for ax in axes[0,:]:
     add_stim(ax,vpl_stim,axis='xy',DA=False)
@@ -433,14 +452,88 @@ add_stim(axes,vpl_stim,axis='x',DA=False)
 
 """
  
-       _                  
-    __| | ___  _ __   ___ 
-   / _` |/ _ \| '_ \ / _ \
-  | (_| | (_) | | | |  __/
-   \__,_|\___/|_| |_|\___|
-                          
+               _                 _   _             
+    __ _ _ __ (_)_ __ ___   __ _| |_(_) ___  _ __  
+   / _` | '_ \| | '_ ` _ \ / _` | __| |/ _ \| '_ \ 
+  | (_| | | | | | | | | | | (_| | |_| | (_) | | | |
+   \__,_|_| |_|_|_| |_| |_|\__,_|\__|_|\___/|_| |_|
+                                                   
  
 """
+# %%
+import matplotlib.animation as animation
+
+tt_decoded = tt_dc[sp.argmax(Ls_avg,axis=1)]
+tt_decoded_opto = tt_dc[sp.argmax(Ls_opto_avg,axis=1)]
+
+fig, axes = plt.subplots()
+
+artists = []
+line, = axes.plot(tt_dc, sp.zeros(tt_dc.shape[0]),color='firebrick',lw=2)
+artists.append(line)
+line_opto, = axes.plot(tt_dc, sp.zeros(tt_dc.shape[0]),color='darkcyan',lw=2)
+artists.append(line_opto)
+vline_true = axes.axvline(color='k',linestyle=':')
+artists.append(vline_true)
+
+n_history = 10
+history_alphas = sp.linspace(0.5,0,n_history)
+
+vlines_dc_vpl = []
+vlines_dc_da = []
+
+for h in range(n_history):
+    l = axes.axvline(ymin=0.9,ymax=1,lw=2,color='firebrick',alpha=history_alphas[h],zorder=-100)
+    artists.append(l)
+
+for h in range(n_history):
+    l = axes.axvline(ymin=0.9,ymax=1,lw=2,color='darkcyan',alpha=history_alphas[h],zorder=-100)
+    artists.append(l)
+
+axes.set_ylim(-0.1,0.4)
+
+def init():  # only required for blitting to give a clean slate.
+    # line.set_ydata([np.nan] * tt_dc.shape[0])
+    # line_opto.set_ydata([np.nan] * tt_dc.shape[0])
+    # return line, line_opto, vline_true, vlines_dc_vpl, vlines_dc_da
+    # return line, line_opto, vline_true
+    # return vlines_dc_vpl, vlines_dc_da
+    return artists
+
+def animate(i):
+    artists[0].set_ydata(Ls_avg[i,:])
+    artists[1].set_ydata(Ls_opto_avg[i,:])
+    artists[2].set_xdata(tt_dc[i])
+
+    vlines_dc_vpl = artists[3:3+n_history]
+    for j,vl in enumerate(vlines_dc_vpl):
+        try:
+            vl.set_xdata(tt_decoded[i-j])
+        except:
+            pass
+
+    vlines_dc_da = artists[3+n_history:]
+    for j,vl in enumerate(vlines_dc_da):
+        try:
+            vl.set_xdata(tt_decoded_opto[i-j])
+        except:
+            pass
+        
+    return artists
+
+
+# frames = None
+frames = sp.arange(tt_dc.shape[0])
+times = (0.5,1)
+axes.set_xlim(0.4,1.2)
+
+inds = [sp.argmin(sp.absolute(tt_dc - t)) for t in times]
+frames = sp.arange(*inds,1)
+ani = animation.FuncAnimation(fig, animate, frames=frames, init_func=init, interval=50, blit=True, repeat=True)
+# ani = animation.FuncAnimation(fig, animate, frames=frames, init_func=init, interval=50, repeat=True)
+
+
+
 # %% Prt inspect
 u = 10
 fig , axes = plt.subplots()
@@ -451,6 +544,17 @@ axes.set_xlabel('time')
 axes.set_ylabel('firing rate')
 
 
+
+"""
+ 
+   _                           _   
+  (_)_ __  ___ _ __   ___  ___| |_ 
+  | | '_ \/ __| '_ \ / _ \/ __| __|
+  | | | | \__ \ |_) |  __/ (__| |_ 
+  |_|_| |_|___/ .__/ \___|\___|\__|
+              |_|                  
+ 
+"""
 # %% comparing sklearn and scipy kde bandwiths
 N = int(200)
 samples = sp.concatenate([sp.randn(N)-2,sp.randn(N)+2],axis=0)
