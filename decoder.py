@@ -36,12 +36,16 @@ mpl.rcParams['figure.dpi'] = 331
 """
 # %% 
 folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0/")
+# folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
 
 os.chdir(folder)
 import analysis_params
+from importlib import reload
+reload(analysis_params)
 
 bin_file = folder / analysis_params.bin_file
 path = bin_file.with_suffix('.neo.zfr.sliced')
+
 # path = folder / "test_data.neo.zfr.sliced"
 
 with open(path,'rb') as fH:
@@ -81,6 +85,11 @@ vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
 
 # %% STR vs CX 
 # FIXME this requires going back all the way
+
+area = 'STR'
+
+# if str(folder) == "/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0":
+
 Sts = Segs[0].spiketrains
 d = [st.annotations['depth'] - 4000 for st in Sts]
 depth_sep = -1700
@@ -95,12 +104,51 @@ for st in Sts:
 str_inds = sp.where([s.annotations['area'] == 'STR' for s in Segs[0].spiketrains])[0]
 cx_inds = sp.where([s.annotations['area'] == 'CX' for s in Segs[0].spiketrains])[0]
 
-Rates_ = Rates_[str_inds,:]
-Rates_opto_ = Rates_opto_[str_inds,:]
+if area == 'STR':
+    Rates_ = Rates_[str_inds,:]
+    Rates_opto_ = Rates_opto_[str_inds,:]
+
+if area == 'CX':
+    Rates_ = Rates_[cx_inds,:]
+    Rates_opto_ = Rates_opto_[cx_inds,:]
 
 nTrials = stim_inds.shape[0]
 nUnits = Rates_.shape[0]
 
+# # %% store for combining with the other recording
+# path = bin_file.with_suffix('.for_decoder')
+# with open(path,'wb') as fH:
+#     pickle.dump(Rates_, fH)
+
+# path = bin_file.with_suffix('.for_decoder_opto')
+# with open(path,'wb') as fH:
+#     pickle.dump(Rates_opto_, fH)
+
+# # %% load for decoder
+# # other_folder = ""
+
+# other_folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0/")
+# # folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
+
+# os.chdir(other_folder)
+# import analysis_params
+# from importlib import reload
+# reload(analysis_params)
+
+# bin_file = other_folder / analysis_params.bin_file
+
+# path = bin_file.with_suffix('.for_decoder')
+# with open(path,'rb') as fH:
+#     Rates_other_ = pickle.load(fH)
+
+# path = bin_file.with_suffix('.for_decoder_opto')
+# with open(path,'rb') as fH:
+#     Rates_opto_other_ = pickle.load(fH)
+
+# # %% combining
+# min_trials = Rates_.shape[1]
+# Rates_ = sp.concatenate([Rates_,Rates_other_[:,:min_trials]],axis=0)
+# Rates_opto_ = sp.concatenate([Rates_opto_,Rates_opto_other_],axis=0)
 
 """
  
@@ -259,7 +307,17 @@ def decode_trials(Prt, Rates_test, tt_dc, rr):
 
     return Ls
 
-# %% spitting data into train and test
+"""
+ 
+  __  ____     ___    _     
+  \ \/ /\ \   / / \  | |    
+   \  /  \ \ / / _ \ | |    
+   /  \   \ V / ___ \| |___ 
+  /_/\_\   \_/_/   \_\_____|
+                            
+ 
+"""
+# %%
 k = 5
 nTrials = Rates_.shape[1]
 rand_inds = sp.arange(nTrials)
@@ -283,7 +341,7 @@ else:
 Rates_split = sp.split(Rates_cut,k,1)
 
 # decoding times
-dt = 0.005
+dt = 0.01
 tt_dc = sp.arange(-0.25,3.25,dt)
 
 # firing rate vector and binning
@@ -292,6 +350,8 @@ rr = sp.arange(-4,4,dr)
 
 Ls_avgs = sp.zeros((tt_dc.shape[0],tt_dc.shape[0],k))
 Ls_opto_avgs = sp.zeros((tt_dc.shape[0],tt_dc.shape[0],k))
+Ls_chance_avgs = sp.zeros((tt_dc.shape[0],tt_dc.shape[0],k))
+Ls_chance_opto_avgs = sp.zeros((tt_dc.shape[0],tt_dc.shape[0],k))
 
 tstart = time()
 ts_loop = []
@@ -306,12 +366,23 @@ for ki in range(k):
     Prt = calc_Prt(Rates_train, tt_dc, rr, bandwidth=0.25)
     Ls = decode_trials(Prt, Rates_test, tt_dc, rr)
 
+    # chance: shuffling Prt in time axis
+    rand_inds = sp.arange(tt_dc.shape[0])
+    sp.random.shuffle(rand_inds)
+    Prt_shuff = Prt[rand_inds,:,:]
+    Ls_chance = decode_trials(Prt_shuff, Rates_test, tt_dc, rr)
+
     # decode all opto trials with this
     Ls_opto = decode_trials(Prt, Rates_opto__, tt_dc, rr)
+
+    # opto chance
+    Ls_chance_opto = decode_trials(Prt_shuff, Rates_opto__, tt_dc, rr)
 
     # store
     Ls_avgs[:,:,ki] = sp.average(Ls,axis=2)
     Ls_opto_avgs[:,:,ki] = sp.average(Ls_opto,axis=2)
+    Ls_chance_avgs[:,:,ki] = sp.average(Ls_chance,axis=2)
+    Ls_chance_opto_avgs[:,:,ki] = sp.average(Ls_chance_opto,axis=2)
 
     # error quant
     tt_decoded = tt_dc[sp.argmax(sp.average(Ls,axis=2),axis=1)]
@@ -334,11 +405,87 @@ tt_decoded = tt_dc[sp.argmax(Ls_avg,axis=1)]
 rss = sp.sum((tt_decoded - tt_dc)**2)
 print("error from avg: ", rss/tt_dc.shape[0])
 
-out_path = bin_file.with_suffix('.decoder.str.k%1d.dt=%.3f.npy'%(stim_k,dt))
+out_path = bin_file.with_suffix('.decoder.vpl.'+area+'.k%1d.dt=%.3f.npy'%(stim_k,dt))
 sp.save(out_path,Ls_avgs)
 
-out_path = bin_file.with_suffix('.decoder.str.k%1d.dt=%.3f.npy'%(stim_k,dt))
+out_path = bin_file.with_suffix('.decoder.opto.'+area+'.k%1d.dt=%.3f.npy'%(stim_k,dt))
 sp.save(out_path,Ls_opto_avgs)
+
+out_path = bin_file.with_suffix('.decoder.shuff.'+area+'.k%1d.dt=%.3f.npy'%(stim_k,dt))
+sp.save(out_path,Ls_chance_avgs)
+
+out_path = bin_file.with_suffix('.decoder.opto.shuff.'+area+'.k%1d.dt=%.3f.npy'%(stim_k,dt))
+sp.save(out_path,Ls_chance_opto_avgs)
+
+"""
+ 
+       _             _                         
+   ___(_)_ __   __ _| | ___   _ __ _   _ _ __  
+  / __| | '_ \ / _` | |/ _ \ | '__| | | | '_ \ 
+  \__ \ | | | | (_| | |  __/ | |  | |_| | | | |
+  |___/_|_| |_|\__, |_|\___| |_|   \__,_|_| |_|
+               |___/                           
+ 
+"""
+# %%
+
+nTrials = Rates_.shape[1]
+
+# another working copy: subset in units
+Rates__ = copy(Rates_)
+Rates_opto__ = copy(Rates_opto_)
+
+# decoding times
+dt = 0.005
+tt_dc = sp.arange(-0.25,3.25,dt)
+
+# firing rate vector and binning
+dr = 0.1
+rr = sp.arange(-4,4,dr)
+
+# Ls_avgs_single = sp.zeros((tt_dc.shape[0],tt_dc.shape[0]))
+# Ls_opto_avgs_single = sp.zeros((tt_dc.shape[0],tt_dc.shape[0]))
+# Ls_chance_avgs_single = sp.zeros((tt_dc.shape[0],tt_dc.shape[0]))
+# Ls_chance_opto_avgs_single = sp.zeros((tt_dc.shape[0],tt_dc.shape[0]))
+
+Rates_test = Rates__
+Rates_train = Rates__
+
+# train and self validate
+Prt = calc_Prt(Rates_train, tt_dc, rr, bandwidth=0.25)
+Ls = decode_trials(Prt, Rates_test, tt_dc, rr)
+
+# chance: shuffling Prt in time axis
+rand_inds = sp.arange(tt_dc.shape[0])
+sp.random.shuffle(rand_inds)
+Prt_shuff = Prt[rand_inds,:,:]
+Ls_chance = decode_trials(Prt_shuff, Rates_test, tt_dc, rr)
+
+# decode all opto trials with this
+Ls_opto = decode_trials(Prt, Rates_opto__, tt_dc, rr)
+
+# opto chance
+Ls_chance_opto = decode_trials(Prt_shuff, Rates_opto__, tt_dc, rr)
+
+
+
+
+# %% 
+Ls_corr = sp.average(Ls,axis=2) - sp.average(Ls_chance,axis=2)
+Ls_opto_corr = sp.average(Ls_opto,axis=2) - sp.average(Ls_chance_opto,axis=2)
+plt.matshow(Ls_opto_corr.T,origin='bottom')
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 """
@@ -354,13 +501,28 @@ sp.save(out_path,Ls_opto_avgs)
 
 # %% load
 
-path = bin_file.with_suffix('.decoder.str.k%1d.npy'%stim_k)
-Ls_avgs = sp.load(path)
+area = 'STR'
+dt = 0.01
 
-path = bin_file.with_suffix('.decoder.str.opto.k%1d.npy'%stim_k)
-Ls_opto_avgs = sp.load(path)
+# dt = 0.01
+tt_dc = sp.arange(-0.25,3.25,dt)
+stim_k = 1
 
+out_path = bin_file.with_suffix('.decoder.vpl.'+area+'.k%1d.dt=%.3f.npy'%(stim_k,dt))
+Ls_avgs = sp.load(out_path)
 
+out_path = bin_file.with_suffix('.decoder.opto.'+area+'.k%1d.dt=%.3f.npy'%(stim_k,dt))
+Ls_opto_avgs = sp.load(out_path)
+
+out_path = bin_file.with_suffix('.decoder.shuff.'+area+'.k%1d.dt=%.3f.npy'%(stim_k,dt))
+Ls_chance_avgs = sp.load(out_path)
+
+out_path = bin_file.with_suffix('.decoder.opto.shuff.'+area+'.k%1d.dt=%.3f.npy'%(stim_k,dt))
+Ls_chance_opto_avgs = sp.load(out_path)
+
+# stim related
+stim_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'red')).index
+vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
 
 
 
@@ -375,9 +537,19 @@ Ls_opto_avgs = sp.load(path)
  
 """
 # %% 
- 
 Ls_avg = sp.average(Ls_avgs,axis=2)
 Ls_opto_avg = sp.average(Ls_opto_avgs,axis=2)
+
+Ls_chance_avg = sp.average(Ls_chance_avgs,axis=2)
+Ls_avg = Ls_avg - Ls_chance_avg
+Ls_avg = sp.clip(Ls_avg,0,1)
+
+Ls_chance_opto_avg = sp.average(Ls_chance_opto_avgs,axis=2)
+Ls_opto_avg = Ls_opto_avg - Ls_chance_opto_avg
+Ls_opto_avg = sp.clip(Ls_opto_avg,0,1)
+
+# Ls_opto_avg = sp.average(Ls_opto,axis=2) - sp.average(Ls_chance_opto, axis=2)
+# Ls_opto_avg = sp.clip(Ls_opto_avg,0,1)
 
 Ls_D = Ls_opto_avg - Ls_avg
 
@@ -466,7 +638,7 @@ import matplotlib.animation as animation
 tt_decoded = tt_dc[sp.argmax(Ls_avg,axis=1)]
 tt_decoded_opto = tt_dc[sp.argmax(Ls_opto_avg,axis=1)]
 
-fig, axes = plt.subplots()
+fig, axes = plt.subplots(figsize=[7,3.5])
 
 artists = []
 line, = axes.plot(tt_dc, sp.zeros(tt_dc.shape[0]),color='firebrick',lw=2)
@@ -476,6 +648,13 @@ artists.append(line_opto)
 vline_true = axes.axvline(color='k',linestyle=':')
 artists.append(vline_true)
 
+# axes.plot(tt_dc, sp.average(Ls_chance_avg,axis=1),color='gray')
+# axes.plot(tt_dc, sp.average(Ls_chance_opto_avg,axis=1),color='gray')
+
+axes.set_xlabel('decoder input time (s)')
+axes.set_ylabel('p above chance')
+sns.despine(fig, offset=10)
+fig.tight_layout()
 n_history = 10
 history_alphas = sp.linspace(0.5,0,n_history)
 
@@ -490,7 +669,7 @@ for h in range(n_history):
     l = axes.axvline(ymin=0.9,ymax=1,lw=2,color='darkcyan',alpha=history_alphas[h],zorder=-100)
     artists.append(l)
 
-axes.set_ylim(-0.1,0.4)
+axes.set_ylim(-0.02,0.39)
 
 def init():  # only required for blitting to give a clean slate.
     # line.set_ydata([np.nan] * tt_dc.shape[0])
@@ -524,14 +703,24 @@ def animate(i):
 
 # frames = None
 frames = sp.arange(tt_dc.shape[0])
-times = (0.5,1)
-axes.set_xlim(0.4,1.2)
 
-inds = [sp.argmin(sp.absolute(tt_dc - t)) for t in times]
-frames = sp.arange(*inds,1)
+# times = (0.5,1)
+# inds = [sp.argmin(sp.absolute(tt_dc - t)) for t in times]
+# frames = sp.arange(*inds,1)
+# axes.set_xlim(0.4,1.2)
+
 ani = animation.FuncAnimation(fig, animate, frames=frames, init_func=init, interval=50, blit=True, repeat=True)
 # ani = animation.FuncAnimation(fig, animate, frames=frames, init_func=init, interval=50, repeat=True)
 
+# %% save animation
+
+moviewriter = animation.FFMpegFileWriter(fps=24)
+moviewriter.setup(fig, 'my_movie.mp4', dpi=331)
+n = frames.shape[0]
+for j in range(n):
+    animate(j)
+    moviewriter.grab_frame()
+moviewriter.finish()
 
 
 # %% Prt inspect

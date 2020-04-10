@@ -53,8 +53,8 @@ mpl.rcParams['figure.dpi'] = 331
  
 """
 # %% 
-# folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
-folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0")
+# folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0")
+folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
 
 os.chdir(folder)
 import importlib
@@ -138,7 +138,7 @@ importlib.reload(analysis_params)
 sep = analysis_params.depth_sep
 
 # %% inspect
-if 0:
+if 1:
     fig, axes = plt.subplots(figsize=[2.915, 4.325])
     bins = sp.arange(-4000,0,100)
     axes.hist(Df.depth,bins=bins,color='cornflowerblue',orientation='horizontal')
@@ -153,6 +153,10 @@ if 0:
 # label
 Df['area'] = 'CX'
 Df.loc[Df['depth'] < sep,'area'] = 'STR'
+
+# %% write this to the spiketrains
+for i,St in enumerate(SpikeTrains):
+    St.annotate(area=Df.iloc[i]['area'])
 
 # %%
 """

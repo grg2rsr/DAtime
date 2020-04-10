@@ -43,7 +43,9 @@ plt.style.use('default')
 mpl.rcParams['figure.dpi'] = 331
 
 # %% read 
-folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0/")
+# folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0/")
+folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
+
 os.chdir(folder)
 
 import analysis_params

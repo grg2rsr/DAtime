@@ -54,7 +54,7 @@ stim_path = folder / analysis_params.stim_file
 stim_map_path = folder / analysis_params.stim_map_file
 
 StimMap = pd.read_csv(stim_map_path, delimiter=',')
-StimsDf = pd.read_csv(stim_path, delimiter=',')
+StimsDf = pd.read_csv(stim_path, index_col=0, delimiter=',')
 
 
 """
@@ -125,7 +125,163 @@ sp.save(out_path,nSpikes)
 # %%
 path = bin_file.with_suffix('.pre_post_spikes.npy')
 nSpikes = sp.load(path)
+dSpikes = nSpikes[:,:,1] - nSpikes[:,:,0]
 
+
+"""
+ 
+             __                            _   
+   _ __ ___ / _| ___  _ __ _ __ ___   __ _| |_ 
+  | '__/ _ \ |_ / _ \| '__| '_ ` _ \ / _` | __|
+  | | |  __/  _| (_) | |  | | | | | | (_| | |_ 
+  |_|  \___|_|  \___/|_|  |_| |_| |_|\__,_|\__|
+                                               
+ 
+"""
+
+# %% 
+nTrials = len(Segs)
+unit_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
+
+Data = pd.DataFrame(dSpikes.T,columns=unit_ids,index=range(nTrials))
+
+# lagged prev reg
+StimsDf['prev_blue'] = sp.roll(StimsDf['blue'],-1)
+
+Df = pd.concat([StimsDf,Data],axis=1)
+Dfm = pd.melt(Df,id_vars=StimsDf.columns,var_name='unit_id',value_name='dSpikes')
+Dfm['stim_id'] = pd.Categorical(Dfm['stim_id'])
+
+Dfm['pre'] = pd.melt(pd.DataFrame(nSpikes[:,:,0].T))['value']
+Dfm['post'] = pd.melt(pd.DataFrame(nSpikes[:,:,1].T))['value']
+
+Df = Dfm.drop('dSpikes',axis=1)
+Dfmm = pd.melt(Df,id_vars=Df.columns[:-2],var_name='when',value_name='nSpikes')
+
+cat = pd.Categorical(Dfmm['when'])
+# cat = cat.as_ordered(cat)
+cat = cat.reorder_categories(['pre','post'])
+Dfmm['when'] = cat
+
+"""
+ 
+       _        _                           _      _     
+   ___| |_ __ _| |_ ___ _ __ ___   ___   __| | ___| |___ 
+  / __| __/ _` | __/ __| '_ ` _ \ / _ \ / _` |/ _ \ / __|
+  \__ \ || (_| | |_\__ \ | | | | | (_) | (_| |  __/ \__ \
+  |___/\__\__,_|\__|___/_| |_| |_|\___/ \__,_|\___|_|___/
+                                                         
+ 
+"""
+# %% linear regression for finding how many dSpikes per stim class
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+import patsy
+
+# formula = 'dSpikes ~ 1 + stim_id'
+# formula = 'post ~ 1 + pre + stim_id'
+# formula = 'post ~ 1 + pre'
+formula = "nSpikes ~ 1 + when"
+
+StatsDf = pd.DataFrame(columns=['unit_id','stim_id','p','m'])
+Df_pvalues = []
+Df_params = []
+for stim_id in pd.unique(Dfm['stim_id']):
+    for unit in tqdm(unit_ids):
+        # data = Dfm.groupby(['unit_id','opto','stim_id']).get_group((unit,'red',0))
+        data = Dfmm.groupby(['unit_id','stim_id','opto']).get_group((unit,stim_id,'red'))
+
+        dmatrix = patsy.dmatrices(formula, data=data)[1]
+
+        model = smf.ols(formula=formula, data=data)
+        res = model.fit()
+
+        pvalues = res.pvalues
+        params = res.params
+
+        pvalues['unit'] = unit
+        params['unit'] = unit
+
+        pvalues['stim_id'] = stim_id
+        params['stim_id'] = stim_id
+
+        Df_pvalues.append(pvalues)
+        Df_params.append(params)
+        # p = res.pvalues['when[T.post]']
+        # m = res.params['when[T.post]']
+
+        # StatsDf = StatsDf.append(pd.DataFrame([[unit,stim_id,p,m,]],columns=StatsDf.columns))
+# StatsDf = StatsDf.reset_index(drop=True)
+Df_pvalues = pd.DataFrame(Df_pvalues)
+Df_params = pd.DataFrame(Df_params)
+
+# %% distilling this to df stats
+key  = 'when[T.post]'
+StatsDf = pd.concat([Df_params[['unit','stim_id',key]],Df_pvalues[key]],axis=1)
+StatsDf.columns = ['unit_id','stim_id','m','p']
+StatsDf[['unit_id','stim_id']] = StatsDf[['unit_id','stim_id']].astype('int')
+
+# %% adding depth info to StatsDf FIXME
+
+Sts = Segs[0].spiketrains
+d = [st.annotations['depth'] - 4000 for st in Sts]
+depth_sep = -1700
+
+for st in Sts:
+    depth = st.annotations['depth'] - 4000
+    if depth < depth_sep:
+        st.annotate(area='STR')
+    else:
+        st.annotate(area='CX')
+
+depthDf = pd.DataFrame([(st.annotations['id'],st.annotations['area']) for st in Sts],columns=['unit_id','area'])
+StatsDf = pd.merge(StatsDf,depthDf,on='unit_id')
+
+alpha = 0.025
+StatsDf['sig'] = StatsDf['p'] < alpha
+StatsDf['upmod'] = sp.logical_and(StatsDf['sig'].values,(StatsDf['m'] > 0).values)
+
+out_path = bin_file.with_suffix('.stim_stats.csv')
+StatsDf.to_csv(out_path)
+
+
+# StatsDf.groupby(('stim_id','area')).sum()
+
+"""
+ 
+       _        _               _     
+   ___| |_ __ _| |_ ___  __   _(_)___ 
+  / __| __/ _` | __/ __| \ \ / / / __|
+  \__ \ || (_| | |_\__ \  \ V /| \__ \
+  |___/\__\__,_|\__|___/   \_/ |_|___/
+                                      
+ 
+"""
+
+# %% connected dots plot
+fig, axes = plt.subplots(ncols=3,sharey=True,figsize=[2,5])
+stim_id = 1
+nStims  = pd.unique(StimsDf['stim_id']).shape[0]
+
+for k, stim_id in enumerate(range(nStims)):
+
+    data = Dfm.groupby(['stim_id','opto']).get_group((stim_id,'red'))
+
+    sig_mod_unit_ids = pd.unique(StatsDf.groupby(('stim_id','upmod')).get_group((stim_id,True))['unit_id'])
+
+    d = data[['unit_id','pre','post']].groupby('unit_id').mean()
+    for i,row in d.iterrows():
+        unit_id = row.name
+        if unit_id in sig_mod_unit_ids:
+            color = 'red'
+        else:
+            color = 'gray'
+        axes[k].plot([0,1],[row['pre'],row['post']],lw=1,color=color,alpha=0.25)
+
+
+fig.tight_layout()
+
+# %%
 
 """
  
@@ -137,8 +293,6 @@ nSpikes = sp.load(path)
   |_|              |_|                   
  
 """
-# %%
-dSpikes = nSpikes[:,:,1] - nSpikes[:,:,0]
 
 # %% plot salt n pepper image
 nStimClasses = len(StimsDf.groupby('stim_id'))
@@ -160,28 +314,6 @@ for ax in axes:
 # this could be kept as a helper
 # sts = [st for st in seg.spiketrains if st.annotations['id'] in stim_inds]
 
-# %% flatten
-k = 0
-inds = StimsDf.groupby(['stim_id','opto']).get_group((k,'red')).index
-
-Df = pd.DataFrame(dSpikes[:,inds],index=range(nUnits),columns=range(len(inds)))
-
-Dfm = pd.melt(Df.reset_index(),id_vars='index')
-Dfm.columns=['unit','trial','dSpikes']
-
-sort_inds = Dfm.groupby('unit').mean().sort_values('dSpikes').index
-sns.barplot(data=Dfm,x='unit',y='dSpikes',order=sort_inds,errwidth=0.1,**dict(linewidth=0.1))
-
-
-# %% pack all stuff
-unit_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
-
-StimsDf['prev_blue'] = sp.roll(StimsDf['blue'].values,-1)
-
-Df = pd.DataFrame(dSpikes.T,columns=unit_ids,index=range(nTrials))
-Df = pd.concat([StimsDf[['stim_id','prev_blue']],Df],axis=1)
-
-Dfm = pd.melt(Df,id_vars=['stim_id','prev_blue'],var_name='unit_id',value_name='dSpikes')
 
 
 
@@ -193,8 +325,6 @@ Dfm = pd.melt(Df,id_vars=['stim_id','prev_blue'],var_name='unit_id',value_name='
 
 
 
-
-# %%
 
 """
  
@@ -206,103 +336,123 @@ Dfm = pd.melt(Df,id_vars=['stim_id','prev_blue'],var_name='unit_id',value_name='
               |___/                                |___/               
  
 """
-
-# %% annotate depth
-# FIXME this requires going back all the way
-Sts = Segs[0].spiketrains
-d = [st.annotations['depth'] - 4000 for st in Sts]
-depth_sep = analysis_params.depth_sep
-
-for st in Sts:
-    depth = st.annotations['depth'] - 4000
-    if depth < depth_sep:
-        st.annotate(area='STR')
-    else:
-        st.annotate(area='CX')
-
-# reformatting from new data format 
-# and shuffeling!
+# %% 
 
 nUnits = len(Segs[0].spiketrains)
 nTrials = len(Segs)
 
 Rates = sp.zeros((nUnits,nTrials),dtype='object')
 ix = sp.arange(nTrials)
-# sp.random.shuffle(ix)
 
 for i,j in enumerate(ix):
     Rates[:,i] = Segs[j].analogsignals
 
-# %% selection
-stim_k = 1 # the stim to analyze 
-stim_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'red')).index
-Rates_ = Rates[:,stim_inds]
+# %% splitting
 
-opto_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'both')).index
-Rates_opto_ = Rates[:,opto_inds]
+# plotting helper
+def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
+    """ takes the Rates array with all info and plots only the subset """
+    Rates_ = Rates[:,stim_inds]
+    Rates_ = Rates_[unit_inds,:]
 
-nTrials = stim_inds.shape[0]
-nUnits = Rates_.shape[0]
+    nUnits = Rates_.shape[0]
+    nTrials = Rates_.shape[1]
 
-# FIXME hacked stim for now
-dur, n, f = StimMap.iloc[stim_k][['dur','n','f']]
-times = sp.arange(n) * 1/f * pq.s + analysis_params.VPL_onset * pq.s
-epoch = neo.core.Epoch(times=times ,durations=dur*pq.s)
+    r_avgs = sp.zeros((Rates_[0,0].shape[0],nUnits))
+    for u in range(nUnits):
+        r = average_asigs(Rates_[u,:])
+        r_avgs[:,u] = r.magnitude.flatten()
 
-vpl_stim = epoch
+    if order is None:
+        sort_inds = sp.argsort(sp.argmax(r_avgs,0))[::-1]
+    else:
+        sort_inds = order 
 
-# %% average rate plot: split by cx vs str
-str_inds = sp.where([s.annotations['area'] == 'STR' for s in Segs[0].spiketrains])[0]
-cx_inds = sp.where([s.annotations['area'] == 'CX' for s in Segs[0].spiketrains])[0]
+    ext = (r.times[0],r.times[-1],0,nUnits)
+    im = axes.matshow(r_avgs.T[sort_inds,:],cmap='inferno',origin='bottom',extent=ext,vmin=-1,vmax=3)
+    axes.set_aspect('auto')
 
-# xval sort
-def xval_sort(inds,k):
-    """ poor mans xval sorter """
-    r_avgs = sp.zeros((Rates_[0,0].shape[0],inds.shape[0],2))
-    for i,u in enumerate(inds):
-        r = average_asigs(Rates_[u,:int(nTrials/k)])
-        r_avgs[:,i,0] = r.magnitude.flatten()
+    return axes, im, r_avgs, sort_inds
 
-        r = average_asigs(Rates_[u,int(nTrials/k):])
-        r_avgs[:,i,1] = r.magnitude.flatten()
+# gather indices
+stim_id = 1 
+stim_inds = StimsDf.groupby(('opto','stim_id')).get_group(('red',stim_id)).index
+stim_inds_opto = StimsDf.groupby(('opto','stim_id')).get_group(('both',stim_id)).index
 
-    # sorting: xval sorting
-    sort_inds = sp.argsort(sp.argmax(r_avgs[:,:,0],0))[::-1]
-    return inds[sort_inds]
+sig_mod_unit_ids = StatsDf.groupby(('area','stim_id','sig')).get_group(('STR',stim_id,True))['unit_id'].unique()
 
-k = 3
-str_inds = xval_sort(str_inds, k)
-cx_inds = xval_sort(cx_inds, k)
-all_inds = xval_sort(sp.arange(nUnits),k)
-
-# %% no xval
-# averaging the rates
-nUnits = Rates_.shape[0]
-nTrials = Rates_.shape[1]
-
-r_avgs = sp.zeros((Rates_[0,0].shape[0],nUnits))
-for u in range(nUnits):
-    r = average_asigs(Rates_[u,:])
-    r_avgs[:,u] = r.magnitude.flatten()
+# get corresponding indices to unit_ids
+all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
+sig_mod_unit_ix = [all_ids.index(id) for id in sig_mod_unit_ids]
 
 
-r_avgs_opto = sp.zeros((Rates_opto_[0,0].shape[0],nUnits))
-for u in range(nUnits):
-    r = average_asigs(Rates_opto_[u,:])
-    r_avgs_opto[:,u] = r.magnitude.flatten()
+gkw = dict(width_ratios=(1,0.05))
+fig, axes = plt.subplots(nrows=3,ncols=2,figsize=[5,5],gridspec_kw=gkw)
 
-def peak_sort(inds, r_avgs):
-    sort_inds = sp.argsort(sp.argmax(r_avgs[:,inds],0))[::-1]
-    return inds[sort_inds]
+# axes[0,0].get_shared_x_axes().join(axes[0,0], axes[0,1])
+# axes[0,0].get_shared_x_axes().join(axes[0,0], axes[0,2])
 
-all_inds = sp.arange(nUnits)
-all_inds = peak_sort(all_inds, r_avgs)
+# axes[0,0].get_shared_y_axes().join(axes[0,0], axes[0,1])
+# axes[0,0].get_shared_y_axes().join(axes[0,0], axes[0,2])
 
-str_inds = peak_sort(str_inds, r_avgs)   
-cx_inds = peak_sort(cx_inds, r_avgs)   
+ax, im, r_avgs_vpl, order = plot_average_rates(Rates, stim_inds, sig_mod_unit_ix, axes=axes[0,0])
+fig.colorbar(im,cax=axes[0,1],label="firing rate(z)", shrink=0.8)
 
-str_inds_opto = peak_sort(str_inds, r_avgs_opto)
-cx_inds_opto = peak_sort(cx_inds, r_avgs_opto)
+ax, im, r_avgs_da, order = plot_average_rates(Rates, stim_inds_opto, sig_mod_unit_ix, order=order, axes=axes[1,0])
+fig.colorbar(im,cax=axes[1,1],label="firing rate(z)", shrink=0.8)
+
+r_avgs_d = r_avgs_da - r_avgs_vpl
+r = Rates[0,0]
+ext = (r.times[0],r.times[-1],0,r_avgs_d.shape[1])
+im = axes[2,0].matshow(r_avgs_d.T[order,:],cmap='PiYG',extent=ext,origin='bottom',vmin=-1,vmax=1)
+axes[2,0].set_aspect('auto')
+fig.colorbar(im,cax=axes[2,1],label="difference", shrink=0.8)
+
+vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
+da_stim, = select(Segs[stim_inds_opto[0]].epochs,'DA_stims')
+
+for ax in axes[:,0]:
+    add_epoch(ax,vpl_stim,color='firebrick')
+    add_epoch(ax,vpl_stim,color='firebrick',above=True)
+
+add_epoch(axes[1,0],da_stim,color='darkcyan',above=True)
+add_epoch(axes[2,0],da_stim,color='darkcyan',above=True)
+
+axes[2,0].xaxis.set_ticks_position('bottom')
+axes[2,0].set_xlabel('time (s)')
+axes[1,0].set_ylabel('units')
+axes[0,0].set_title('VPL stim',fontsize=10)
+axes[1,0].set_title('VPL + SNc/VTA stim',fontsize=10)
+axes[2,0].set_title('stim - no stim',fontsize=10)
+
+axes[0,0].set_xticklabels([])
+axes[1,0].set_xticklabels([])
+
+fig.tight_layout()
+fig.subplots_adjust(wspace=0.01,hspace=0.3)
+    
+
+
+
+
+
+
+
+
+
+
+
+
+"""
+ 
+   _       __ _                          
+  | | ___ / _| |_ _____   _____ _ __ ___ 
+  | |/ _ \ |_| __/ _ \ \ / / _ \ '__/ __|
+  | |  __/  _| || (_) \ V /  __/ |  \__ \
+  |_|\___|_|  \__\___/ \_/ \___|_|  |___/
+                                         
+ 
+"""
 
 
 # %% cmass sorting - just keep for later
@@ -312,129 +462,3 @@ mid_inds = sp.argmin(sp.absolute(cs - mid_val[sp.newaxis,:]),axis=0)
 sort_inds = sp.argsort(mid_inds)[::-1]
 all_inds = all_inds[sort_inds]
 
-# %% plotting all together
-fig, axes = plt.subplots()
-ext = (r.times[0],r.times[-1],0,len(all_inds))
-im = axes.matshow(r_avgs.T[all_inds,:],cmap='inferno',origin='bottom',extent=ext,vmin=-1,vmax=3)
-
-axes.set_aspect('auto')
-add_stim(axes,vpl_stim,DA=False)
-
-
-# %% plot CX and STR seperated
-fig, axes = plt.subplots(nrows=2,sharex=True,gridspec_kw=dict(height_ratios=(1,len(str_inds)/len(cx_inds))))
-# norm = mpl.colors.DivergingNorm(0,vmin=-1,vmax=2)
-# im = plt.matshow(r_avgs.T[inds,:],cmap='inferno',origin='bottom',extent=ext,norm=norm)
-
-ext = (r.times[0],r.times[-1],0,len(cx_inds))
-im = axes[0].matshow(r_avgs.T[cx_inds,:],cmap='inferno',origin='bottom',extent=ext,vmin=-1,vmax=3)
-
-ext = (r.times[0],r.times[-1],0,len(str_inds))
-im = axes[1].matshow(r_avgs.T[str_inds,:],cmap='inferno',origin='bottom',extent=ext,vmin=-1,vmax=3)
-
-for ax in axes:
-    ax.set_aspect('auto')
-    add_stim(ax,vpl_stim,DA=False)
-
-# plt.colorbar(im)
-
-
-# %% plot CX and STR seperated --- opto
-fig, axes = plt.subplots(nrows=2,sharex=True,gridspec_kw=dict(height_ratios=(1,len(str_inds)/len(cx_inds))))
-# norm = mpl.colors.DivergingNorm(0,vmin=-1,vmax=2)
-# im = plt.matshow(r_avgs.T[inds,:],cmap='inferno',origin='bottom',extent=ext,norm=norm)
-
-ext = (r.times[0],r.times[-1],0,len(cx_inds))
-im = axes[0].matshow(r_avgs_opto.T[cx_inds,:],cmap='inferno',origin='bottom',extent=ext,vmin=-1,vmax=3)
-
-ext = (r.times[0],r.times[-1],0,len(str_inds))
-im = axes[1].matshow(r_avgs_opto.T[str_inds,:],cmap='inferno',origin='bottom',extent=ext,vmin=-1,vmax=3)
-
-for ax in axes:
-    ax.set_aspect('auto')
-    add_stim(ax,vpl_stim,DA=False)
-
-# plt.colorbar(im)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# %%
-
-# %% all cells
-# vpl data
-nUnits = Rates_.shape[0]
-nTrials = Rates_.shape[1]
-
-r_avgs = sp.zeros((Rates_[0,0].shape[0],nUnits,2))
-for u in range(nUnits):
-    r = average_asigs(Rates_[u,:int(nTrials/3)])
-    r_avgs[:,u,0] = r.magnitude.flatten()
-    r = average_asigs(Rates_[u,int(nTrials/3):])
-    r_avgs[:,u,1] = r.magnitude.flatten()
-
-# sorting: xval sorting
-inds = sp.argsort(sp.argmax(r_avgs[:,:,0],0))[::-1]
-
-# r_avgs = sp.average(r_avgs,axis=2)
-r_avgs = r_avgs[:,:,1]
-
-# %%
-ext = (r.times[0],r.times[-1],0,nUnits)
-# norm = mpl.colors.DivergingNorm(0,vmin=-1,vmax=2)
-# im = plt.matshow(r_avgs.T[inds,:],cmap='inferno',origin='bottom',extent=ext,norm=norm)
-im = plt.matshow(r_avgs.T[inds,:],cmap='inferno',origin='bottom',extent=ext,vmin=-1,vmax=3)
-plt.gca().set_aspect('auto')
-add_stim(plt.gca(),vpl_stim,DA=False)
-plt.colorbar(im)
-
-# %%
-# opto data
-nUnits = Rates_opto_.shape[0]
-r_avgs_opto = sp.zeros((Rates_opto_[0,0].shape[0],nUnits))
-for u in range(nUnits):
-    r = average_asigs(Rates_opto_[u,:])
-    r_avgs_opto[:,u] = r.magnitude.flatten()
-
-# inds = sp.argsort(sp.argmax(r_avgs,0))
-ext = (r.times[0],r.times[-1],0,nUnits)
-plt.matshow(r_avgs_opto.T[inds,:],origin='bottom',extent=ext,vmin=-1,vmax=2)
-plt.gca().set_aspect('auto')
-add_stim(plt.gca(),vpl_stim)
-
-D = r_avgs_opto - r_avgs
-v = 2
-plt.matshow(D.T[inds,:],origin='bottom',extent=ext,vmin=-v,vmax=v,cmap='PiYG')
-plt.gca().set_aspect('auto')
-add_stim(plt.gca(),vpl_stim)
-
-# %% 
-fig, axes = plt.subplots()
-colors = sns.color_palette('viridis',n_colors=nUnits)
-ysep = 0.2
-tvec = Rates_[0,0].times.magnitude.flatten()
-for u in range(nUnits):
-    axes.plot(r_avgs[:,inds[u]]+u*ysep,color=colors[u],zorder=-1*u)
-    # axes.fill_between(tvec,r_avgs[:,inds[u]]+u*ysep,u*ysep,color=colors[u],zorder=-1*u)
