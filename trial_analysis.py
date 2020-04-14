@@ -293,6 +293,55 @@ fig.tight_layout()
   |_|              |_|                   
  
 """
+# %% 
+sort_ids = Dfm.groupby('unit_id').mean()['dSpikes'].sort_values().index
+nUnits = len(sort_ids)
+# %%
+StatsDf['downmod'] = sp.logical_and(StatsDf['m'] < 0, StatsDf['p'] < 0.025)
+stats = StatsDf.groupby('stim_id').get_group(1)
+stats['colors'] = 'gray'
+stats.loc[stats['upmod']==True,'colors'] = 'red'
+stats.loc[stats['downmod']==True,'colors'] = 'blue'
+stats.index = stats['unit_id']
+colors = [stats.loc[id,'colors'] for id in sort_ids]
+
+# %% strip plot
+data = Dfm.groupby(('stim_id','opto')).get_group((1,'red'))
+kw = dict()
+fig, axes = plt.subplots(figsize=[11,3])
+
+plot = sns.stripplot(ax=axes, x='unit_id',order=sort_inds, y='dSpikes',data=data,size=1)
+# axes.axhline(0,lw=1,linestyle=':',color='k',alpha=0.5)
+
+for i,collection in enumerate(plot.collections):
+    collection.set_facecolor(colors[i])
+
+axes.set_ylabel('∆spikes')
+axes.set_xlabel('units')
+axes.set_xticks([])
+sns.despine(ax=axes,bottom=True)
+
+# for i,artist in enumerate(bplt.artists):
+    # artist.set_facecolor(colors[i])
+
+# %% lines
+fig, axes = plt.subplots()
+
+# get corresponding indices to unit_ids
+all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
+sort_ix = [all_ids.index(id) for id in sort_ids]
+stim_inds = StimsDf.groupby(('stim_id','opto')).get_group((1,'red')).index
+
+axes.matshow(dSpikes[sort_ix,:][:,stim_inds].T,vmin=-15,vmax=15,cmap='PiYG')
+# axes.matshow(dSpikes[sort_ix,:])
+
+axes.set_ylabel('cell id')
+axes.set_xlabel('stim #')
+axes.set_aspect('auto')
+# fig.suptitle('∆spikes in 1s, post - pre')
+
+# cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.75,label='∆spikes')
+
 
 # %% plot salt n pepper image
 nStimClasses = len(StimsDf.groupby('stim_id'))
@@ -300,7 +349,7 @@ nStimClasses = len(StimsDf.groupby('stim_id'))
 fig, axes = plt.subplots(ncols=nStimClasses, figsize=[5.285, 4.775], sharey=True)
 for k in range(nStimClasses):
     inds = StimsDf.groupby(['stim_id','opto']).get_group((k,'red')).index
-    im = axes[k].matshow(dSpikes[:,inds],vmin=-15,vmax=15,cmap='PiYG')
+    im = axes[k].matshow(dSpikes[:,inds])
     
 axes[0].set_ylabel('cell id')
 axes[1].set_xlabel('stim #')
@@ -375,7 +424,7 @@ def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
     return axes, im, r_avgs, sort_inds
 
 # gather indices
-stim_id = 1 
+stim_id = 1
 stim_inds = StimsDf.groupby(('opto','stim_id')).get_group(('red',stim_id)).index
 stim_inds_opto = StimsDf.groupby(('opto','stim_id')).get_group(('both',stim_id)).index
 

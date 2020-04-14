@@ -19,7 +19,6 @@ def average_asigs(asigs):
 def select(neo_objs,value,key="label"):
     return [obj for obj in neo_objs if obj.annotations[key] == value]
 
-
 """
  
          _       _   _   _             
