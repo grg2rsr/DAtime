@@ -104,6 +104,24 @@ def read_spiketrains(ks2, fs, t_stop):
         Sts.append(St)
     return Sts
 
+def read_spiketrains_2(ks2, fs, t_stop):
+    """ reads kilosort based output into a list of neo SpikeTrains
+    does not require the presence of bin_file
+    """
+
+    Templates = ks2['spike_clusters']
+    templates_unique = sp.unique(Templates)
+    nUnits = templates_unique.shape[0]
+    spike_times = (ks2['spike_times'] / fs).rescale(pq.s)
+
+    Sts = []
+    for i, template_id in enumerate(tqdm(templates_unique)):
+        times = spike_times[sp.where(Templates == template_id)[0]]
+        St = neo.core.SpikeTrain(times, t_stop=t_stop)
+        Sts.append(St)
+        
+    return Sts
+
 def get_TTL_onsets(bin_path, channel_id, chunk_size=60000):
     """ extracts trigger TTL onset times from a .glx file 
     stores indices (not times) as ints in a as .ttl file """

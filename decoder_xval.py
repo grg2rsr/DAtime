@@ -71,7 +71,7 @@ for j in range(nTrials):
 
 
 # %% insert here the permutation
-stim_k = 1 # the stim to analyze 
+stim_k = 2 # the stim to analyze 
 StimsDf_sub = StimsDf.groupby('stim_id').get_group(stim_k)
 opto_labels = StimsDf_sub['opto'].values
 sp.random.shuffle(opto_labels)
@@ -81,7 +81,7 @@ opto_inds = StimsDf_sub.groupby('opto').get_group('both').index
 
 
 # %% stimulus selection
-stim_k = 1 # the stim to analyze 
+stim_k = 2 # the stim to analyze 
 stim_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'red')).index
 opto_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'both')).index
 
@@ -104,15 +104,15 @@ vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
 # FIXME this requires going back all the way
 area = 'STR'
 Sts = Segs[0].spiketrains
-d = [st.annotations['depth'] - 4000 for st in Sts]
-depth_sep = -1700
+# d = [st.annotations['depth'] - 4000 for st in Sts]
+# depth_sep = -1700
 
-for st in Sts:
-    depth = st.annotations['depth'] - 4000
-    if depth < depth_sep:
-        st.annotate(area='STR')
-    else:
-        st.annotate(area='CX')
+# for st in Sts:
+#     depth = st.annotations['depth'] - 4000
+#     if depth < depth_sep:
+#         st.annotate(area='STR')
+#     else:
+#         st.annotate(area='CX')
 
 str_inds = sp.where([s.annotations['area'] == 'STR' for s in Segs[0].spiketrains])[0]
 cx_inds = sp.where([s.annotations['area'] == 'CX' for s in Segs[0].spiketrains])[0]
@@ -143,15 +143,11 @@ nUnits = Rates_.shape[0]
 # %%
 k = 5
 nTrials = Rates_.shape[1]
+
+# randomly reorder trials
 rand_inds = sp.arange(nTrials)
 sp.random.shuffle(rand_inds)
-
-nUnits_lim = nUnits
-Rates_ = Rates_[:,rand_inds]
-
-# another working copy: subset in units
-Rates__ = Rates_[:nUnits_lim,:]
-Rates_opto__ = Rates_opto_[:nUnits_lim,:]
+Rates__ = Rates_[:,rand_inds]
 
 # discard excess data
 ex = nTrials % k
@@ -165,7 +161,7 @@ Rates_split = sp.split(Rates_cut,k,1)
 
 # decoding times
 dt = 0.01
-tt_dc = sp.arange(-0.25,3.25,dt)
+tt_dc = sp.arange(-0.25,2.75,dt)
 
 # firing rate vector and binning
 dr = 0.1
@@ -197,10 +193,10 @@ for ki in range(k):
     Ls_chance = decode_trials(Prt_shuff, Rates_test, tt_dc, rr)
 
     # decode all opto trials with this
-    Ls_opto = decode_trials(Prt, Rates_opto__, tt_dc, rr)
+    Ls_opto = decode_trials(Prt, Rates_opto_, tt_dc, rr)
 
     # opto chance
-    Ls_chance_opto = decode_trials(Prt_shuff, Rates_opto__, tt_dc, rr)
+    Ls_chance_opto = decode_trials(Prt_shuff, Rates_opto_, tt_dc, rr)
 
     # store
     Ls_avgs[:,:,ki] = sp.average(Ls,axis=2)
@@ -535,66 +531,5 @@ plt.plot(v,pdf_sk*dv)
 
 
 
-
-
-
-
-"""
- 
-       _             _                         
-   ___(_)_ __   __ _| | ___   _ __ _   _ _ __  
-  / __| | '_ \ / _` | |/ _ \ | '__| | | | '_ \ 
-  \__ \ | | | | (_| | |  __/ | |  | |_| | | | |
-  |___/_|_| |_|\__, |_|\___| |_|   \__,_|_| |_|
-               |___/                           
- 
-"""
-# %%
-
-nTrials = Rates_.shape[1]
-
-# another working copy: subset in units
-Rates__ = copy(Rates_)
-Rates_opto__ = copy(Rates_opto_)
-
-# decoding times
-dt = 0.005
-tt_dc = sp.arange(-0.25,3.25,dt)
-
-# firing rate vector and binning
-dr = 0.1
-rr = sp.arange(-4,4,dr)
-
-# Ls_avgs_single = sp.zeros((tt_dc.shape[0],tt_dc.shape[0]))
-# Ls_opto_avgs_single = sp.zeros((tt_dc.shape[0],tt_dc.shape[0]))
-# Ls_chance_avgs_single = sp.zeros((tt_dc.shape[0],tt_dc.shape[0]))
-# Ls_chance_opto_avgs_single = sp.zeros((tt_dc.shape[0],tt_dc.shape[0]))
-
-Rates_test = Rates__
-Rates_train = Rates__
-
-# train and self validate
-Prt = calc_Prt(Rates_train, tt_dc, rr, bandwidth=0.25)
-Ls = decode_trials(Prt, Rates_test, tt_dc, rr)
-
-# chance: shuffling Prt in time axis
-rand_inds = sp.arange(tt_dc.shape[0])
-sp.random.shuffle(rand_inds)
-Prt_shuff = Prt[rand_inds,:,:]
-Ls_chance = decode_trials(Prt_shuff, Rates_test, tt_dc, rr)
-
-# decode all opto trials with this
-Ls_opto = decode_trials(Prt, Rates_opto__, tt_dc, rr)
-
-# opto chance
-Ls_chance_opto = decode_trials(Prt_shuff, Rates_opto__, tt_dc, rr)
-
-
-
-
-# %% 
-Ls_corr = sp.average(Ls,axis=2) - sp.average(Ls_chance,axis=2)
-Ls_opto_corr = sp.average(Ls_opto,axis=2) - sp.average(Ls_chance_opto,axis=2)
-plt.matshow(Ls_opto_corr.T,origin='bottom')
 
 

@@ -30,7 +30,9 @@ def select(neo_objs,value,key="label"):
  
 """
 def add_stim(axes,epoch,DA=True,axis='x'):
-    """ epoch is vpl stim"""
+    """ epoch is vpl stim
+    this will become obsolete
+    """
     kwargs = dict(alpha=0.25, linewidth=0)
     if not DA:
         for i in range(epoch.times.shape[0]):
@@ -45,7 +47,7 @@ def add_stim(axes,epoch,DA=True,axis='x'):
     
     return axes
 
-def add_epoch(axes, epoch, above=False, axis='x', alpha=0.25, linewidth=0, color='firebrick'):
+def add_epoch(axes, epoch, above=False, axis='x', alpha=0.5, linewidth=0, color='firebrick'):
     if above:
         hmin, hmax = 1.01, 1.05
         clip_on = False

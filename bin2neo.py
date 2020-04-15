@@ -22,7 +22,7 @@ as each units annotations (redundant though)
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-# import seaborn as sns
+import seaborn as sns
 
 import sys,os
 import pickle
@@ -53,8 +53,8 @@ mpl.rcParams['figure.dpi'] = 331
  
 """
 # %% 
-# folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0")
-folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
+folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0")
+# folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
 
 os.chdir(folder)
 import importlib
@@ -77,13 +77,14 @@ fs = meta_data['imSampRate'] * pq.Hz
 t_stop = meta_data['fileTimeSecs'] * pq.s
 
 # this returns spiketrains of all cells present in the recording
-SpikeTrains = npxlib.read_spiketrains(ks2,fs=fs,t_stop=t_stop)
+SpikeTrains = npxlib.read_spiketrains_2(ks2,fs=fs,t_stop=t_stop)
 print("initial number of detected cells by Ks2: ", len(SpikeTrains))
 
 # attach ks2 IDs to each unit
 for i,St in enumerate(SpikeTrains):
     St.annotations = dict(CInfo.loc[i])
 
+# %%
 """
  
             _           _   
@@ -101,8 +102,6 @@ for i,St in enumerate(SpikeTrains):
 
 Df = CInfo.loc[CInfo.group != 'noise'].groupby('KSLabel').get_group('good')
 good_ids = Df['id']
-
-# labels = [St.annotations['label'] for St in SpikeTrains]
 
 # subset
 SpikeTrains = [St for St in SpikeTrains if St.annotations['id'] in good_ids.values]
@@ -142,10 +141,10 @@ if 1:
     fig, axes = plt.subplots(figsize=[2.915, 4.325])
     bins = sp.arange(-4000,0,100)
     axes.hist(Df.depth,bins=bins,color='cornflowerblue',orientation='horizontal')
-    axes.set_ylabel("depth (µm)")
+    axes.set_ylabel("depth on probe (µm)")
     axes.set_xlabel("count")
-    axes.set_title("cells by depth")
-
+    axes.set_title("unit count by depth")
+    sns.despine(fig)
     
     axes.axhline(sep,linestyle=':', color='k')
     fig.tight_layout()
@@ -156,6 +155,7 @@ Df.loc[Df['depth'] < sep,'area'] = 'STR'
 
 # %% write this to the spiketrains
 for i,St in enumerate(SpikeTrains):
+    St.annotate(depth=Df.iloc[i]['depth'])
     St.annotate(area=Df.iloc[i]['area'])
 
 # %%
@@ -272,22 +272,21 @@ with open(bin_path.with_suffix('.neo'), 'wb') as fH:
                           
  
 """
-# with open(bin_path.with_suffix('.neo'), 'rb') as fH:
-    # seg = pickle.load(fH)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+"""
+ 
+   _                 _ 
+  | | ___   __ _  __| |
+  | |/ _ \ / _` |/ _` |
+  | | (_) | (_| | (_| |
+  |_|\___/ \__,_|\__,_|
+                       
+ 
+"""
+# %%
+with open(bin_path.with_suffix('.neo'), 'rb') as fH:
+    Seg = pickle.load(fH)
 
 
 
@@ -303,18 +302,40 @@ with open(bin_path.with_suffix('.neo'), 'wb') as fH:
 | _| `._____/__/     \__\  \__/  \__/            \__/     |__| |_______|   \__/  \__/
 
 """
-# fig, axes = plt.subplots(figsize=[6.4 , 9.23])
-# t_start = 123*pq.s
-# t_stop = 123.5*pq.s
-# Asig = npxlib.glx2asig(bin_path, t_start, t_stop)
-# Asig = npxlib.global_mean(Asig,ks2)
-# # Asig = npxlib.preprocess_ks2based(Asig,ks2)
-# kw=dict(lw=0.5,alpha=0.8,color='k')
-# npxlib.plot_npx_asig(Asig,ds=1, ysep=0.0002,kwargs=kw,ax=axes)
+fig, axes = plt.subplots(figsize=[6.4 , 9.23])
+t_start = 123*pq.s
+t_stop = 123.5*pq.s
+Asig = npxlib.glx2asig(bin_path, t_start, t_stop)
+Asig = npxlib.global_mean(Asig,ks2)
+# Asig = npxlib.preprocess_ks2based(Asig,ks2)
+kw=dict(lw=0.5,alpha=0.8,color='k')
+npxlib.plot_npx_asig(Asig,ds=1, ysep=0.0002,kwargs=kw,ax=axes)
 
-# import seaborn as sns
-# sns.despine(ax=axes,left=True)
-# axes.set_xlabel('time (s)')
-# axes.set_ylabel('channel')
-# axes.set_yticks([])
-# fig.tight_layout()
+import seaborn as sns
+sns.despine(ax=axes,left=True)
+axes.set_xlabel('time (s)')
+axes.set_ylabel('channel')
+axes.set_yticks([])
+fig.tight_layout()
+
+"""
+ 
+                               _ 
+  __  _____ ___  _ __ _ __ ___| |
+  \ \/ / __/ _ \| '__| '__/ _ \ |
+   >  < (_| (_) | |  | | |  __/ |
+  /_/\_\___\___/|_|  |_|  \___|_|
+                                 
+ 
+"""
+# %% 
+import elephant as ele
+u = 0
+St = Seg.spiketrains[21]
+bst = ele.conversion.BinnedSpikeTrain(St,binsize=1*pq.ms)
+
+asig, inds = ele.spike_train_correlation.cross_correlation_histogram(bst,bst,window=(-150,150))
+asig[sp.where(inds==0)[0]] = 0
+plt.plot(asig.times,asig)
+
+# %%

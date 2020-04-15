@@ -70,18 +70,8 @@ for j in range(nTrials):
     Rates[:,j] = Segs[j].analogsignals
 
 # %% Unit selection - STR vs CX 
-# FIXME this requires going back all the way
 area = 'STR'
 Sts = Segs[0].spiketrains
-d = [st.annotations['depth'] - 4000 for st in Sts]
-depth_sep = -1700
-
-for st in Sts:
-    depth = st.annotations['depth'] - 4000
-    if depth < depth_sep:
-        st.annotate(area='STR')
-    else:
-        st.annotate(area='CX')
 
 str_inds = sp.where([s.annotations['area'] == 'STR' for s in Segs[0].spiketrains])[0]
 cx_inds = sp.where([s.annotations['area'] == 'CX' for s in Segs[0].spiketrains])[0]

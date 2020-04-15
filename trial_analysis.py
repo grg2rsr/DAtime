@@ -92,7 +92,7 @@ for i in tqdm(range(nTrials)):
     nSpikes[:,i,1] = [len(st)/2.8 for st in seg_sliced.spiketrains]
 
 # save the result
-out_path = bin_file.with_suffix('.pre_post_spikes2.npy')
+out_path = bin_file.with_suffix('.pre_post_spikes.npy')
 sp.save(out_path,nSpikes)
 
 
@@ -224,20 +224,20 @@ StatsDf[['unit_id','stim_id']] = StatsDf[['unit_id','stim_id']].astype('int')
 # %% adding depth info to StatsDf FIXME
 
 Sts = Segs[0].spiketrains
-d = [st.annotations['depth'] - 4000 for st in Sts]
-depth_sep = -1700
+# d = [st.annotations['depth'] - 4000 for st in Sts]
+# depth_sep = -1700
 
-for st in Sts:
-    depth = st.annotations['depth'] - 4000
-    if depth < depth_sep:
-        st.annotate(area='STR')
-    else:
-        st.annotate(area='CX')
+# for st in Sts:
+#     depth = st.annotations['depth'] - 4000
+#     if depth < depth_sep:
+#         st.annotate(area='STR')
+#     else:
+#         st.annotate(area='CX')
 
 depthDf = pd.DataFrame([(st.annotations['id'],st.annotations['area']) for st in Sts],columns=['unit_id','area'])
 StatsDf = pd.merge(StatsDf,depthDf,on='unit_id')
 
-alpha = 0.025
+alpha = 0.05
 StatsDf['sig'] = StatsDf['p'] < alpha
 StatsDf['upmod'] = sp.logical_and(StatsDf['sig'].values,(StatsDf['m'] > 0).values)
 
@@ -245,7 +245,12 @@ out_path = bin_file.with_suffix('.stim_stats.csv')
 StatsDf.to_csv(out_path)
 
 
-# StatsDf.groupby(('stim_id','area')).sum()
+StatsDf.groupby(('stim_id','area')).sum()
+
+# %% or load
+
+out_path = bin_file.with_suffix('.stim_stats.csv')
+StatsDf = pd.read_csv(out_path)
 
 """
  
@@ -294,11 +299,18 @@ fig.tight_layout()
  
 """
 # %% 
+stim_id = 2
 sort_ids = Dfm.groupby('unit_id').mean()['dSpikes'].sort_values().index
+
+# get corresponding indices to unit_ids
+all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
+sort_ix = [all_ids.index(id) for id in sort_ids]
+
 nUnits = len(sort_ids)
+
 # %%
 StatsDf['downmod'] = sp.logical_and(StatsDf['m'] < 0, StatsDf['p'] < 0.025)
-stats = StatsDf.groupby('stim_id').get_group(1)
+stats = StatsDf.groupby('stim_id').get_group(stim_id)
 stats['colors'] = 'gray'
 stats.loc[stats['upmod']==True,'colors'] = 'red'
 stats.loc[stats['downmod']==True,'colors'] = 'blue'
@@ -306,15 +318,16 @@ stats.index = stats['unit_id']
 colors = [stats.loc[id,'colors'] for id in sort_ids]
 
 # %% strip plot
-data = Dfm.groupby(('stim_id','opto')).get_group((1,'red'))
-kw = dict()
+data = Dfm.groupby(('stim_id','opto')).get_group((stim_id,'red'))
+# kw = dict()
 fig, axes = plt.subplots(figsize=[11,3])
 
-plot = sns.stripplot(ax=axes, x='unit_id',order=sort_inds, y='dSpikes',data=data,size=1)
+plot = sns.stripplot(ax=axes, x='unit_id', order=sort_ids, y='dSpikes',data=data,size=1)
 # axes.axhline(0,lw=1,linestyle=':',color='k',alpha=0.5)
 
 for i,collection in enumerate(plot.collections):
     collection.set_facecolor(colors[i])
+
 
 axes.set_ylabel('∆spikes')
 axes.set_xlabel('units')
@@ -330,7 +343,7 @@ fig, axes = plt.subplots()
 # get corresponding indices to unit_ids
 all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
 sort_ix = [all_ids.index(id) for id in sort_ids]
-stim_inds = StimsDf.groupby(('stim_id','opto')).get_group((1,'red')).index
+stim_inds = StimsDf.groupby(('stim_id','opto')).get_group((stim_id,'red')).index
 
 axes.matshow(dSpikes[sort_ix,:][:,stim_inds].T,vmin=-15,vmax=15,cmap='PiYG')
 # axes.matshow(dSpikes[sort_ix,:])
@@ -341,6 +354,13 @@ axes.set_aspect('auto')
 # fig.suptitle('∆spikes in 1s, post - pre')
 
 # cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.75,label='∆spikes')
+
+
+
+
+
+
+
 
 
 # %% plot salt n pepper image
@@ -424,7 +444,7 @@ def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
     return axes, im, r_avgs, sort_inds
 
 # gather indices
-stim_id = 1
+stim_id = 2
 stim_inds = StimsDf.groupby(('opto','stim_id')).get_group(('red',stim_id)).index
 stim_inds_opto = StimsDf.groupby(('opto','stim_id')).get_group(('both',stim_id)).index
 
