@@ -69,26 +69,29 @@ Rates = sp.zeros((nUnits,nTrials),dtype='object')
 for j in range(nTrials):
     Rates[:,j] = Segs[j].analogsignals
 
-# %% Unit selection - STR vs CX 
+
+# %% UNIT SELECTION
 area = 'STR'
-Sts = Segs[0].spiketrains
 
-str_inds = sp.where([s.annotations['area'] == 'STR' for s in Segs[0].spiketrains])[0]
-cx_inds = sp.where([s.annotations['area'] == 'CX' for s in Segs[0].spiketrains])[0]
+StatsDf = pd.read_csv(bin_file.with_suffix('.stim_stats.csv'))
+unit_ids = StatsDf.groupby(('area','sig')).get_group((area,True))['unit_id'].unique()
 
-if area == 'STR':
-    Rates_ = Rates[str_inds,:]
+# get corresponding indices to unit_ids
+all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
+unit_ix = [all_ids.index(id) for id in unit_ids]
 
-if area == 'CX':
-    Rates_ = Rates[cx_inds,:]
+# subset
+Rates_ = Rates[unit_ix,:]
+# Rates_opto_ = Rates_opto_[unit_ix,:]
 
-nUnits, nTrials = Rates_.shape
+nUnits = Rates_.shape[0]
+
 
 # %% xval with label permutation each run
 stim_k = 1 # the stim to analyze
 StimsDf_sub = StimsDf.groupby('stim_id').get_group(stim_k)
 
-nLabelperm = 5
+nLabelperm = 10
 
 for l in range(nLabelperm):
     opto_labels = StimsDf_sub['opto'].values
@@ -98,8 +101,8 @@ for l in range(nLabelperm):
     opto_inds = StimsDf_sub.groupby('opto').get_group('both').index
 
     # actual data slicing
-    Rates_ = Rates[:,stim_inds]
-    Rates_opto_ = Rates[:,opto_inds]
+    Rates__ = Rates_[:,stim_inds]
+    Rates_opto_ = Rates_[:,opto_inds]
 
     nTrials = stim_inds.shape[0]
     nUnits = Rates_.shape[0]
@@ -114,7 +117,7 @@ for l in range(nLabelperm):
     # randomly reorder trials
     rand_inds = sp.arange(nTrials)
     sp.random.shuffle(rand_inds)
-    Rates__ = Rates_[:,rand_inds]
+    Rates__ = Rates__[:,rand_inds]
 
     # discard excess data
     ex = nTrials % k
@@ -128,10 +131,10 @@ for l in range(nLabelperm):
 
     # decoding times
     dt = 0.01
-    tt_dc = sp.arange(-0.25,3.25,dt)
+    tt_dc = sp.arange(-0.25,2.75,dt)
 
     # firing rate vector and binning
-    dr = 0.1
+    dr = 0.2
     rr = sp.arange(-4,4,dr)
 
     # mem alloc
@@ -228,10 +231,10 @@ for l in range(nLabelperm):
 """
 
 # %% load
-nLabelperm = 5
+nLabelperm = 10
 area = 'STR'
 dt = 0.01
-tt_dc = sp.arange(-0.25,3.25,dt)
+tt_dc = sp.arange(-0.25,2.75,dt)
 stim_k = 1
 
 Ls_avgs = []
@@ -261,7 +264,7 @@ Ls_chance_opto_avgs = sp.stack(Ls_chance_opto_avgs,axis=3)
 stim_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'red')).index
 vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
 
-# %% simply average runs
+# just average for now
 Ls_avgs = sp.average(Ls_avgs,axis=3)
 Ls_opto_avgs = sp.average(Ls_opto_avgs,axis=3)
 Ls_chance_avgs = sp.average(Ls_chance_avgs,axis=3)
@@ -281,11 +284,11 @@ Ls_chance_opto_avgs = sp.average(Ls_chance_opto_avgs,axis=3)
 Ls_avg = sp.average(Ls_avgs,axis=2)
 Ls_opto_avg = sp.average(Ls_opto_avgs,axis=2)
 
-Ls_chance_avg = sp.average(Ls_chance_avgs,axis=2)
+Ls_chance_avg = sp.average(Ls_chance_avgs,axis=2) + 1.64*sp.std(Ls_chance_avgs,axis=2)
 Ls_avg = Ls_avg - Ls_chance_avg
 Ls_avg = sp.clip(Ls_avg,0,1)
 
-Ls_chance_opto_avg = sp.average(Ls_chance_opto_avgs,axis=2)
+Ls_chance_opto_avg = sp.average(Ls_chance_opto_avgs,axis=2) + 1.64*sp.std(Ls_chance_opto_avgs,axis=2)
 Ls_opto_avg = Ls_opto_avg - Ls_chance_opto_avg
 Ls_opto_avg = sp.clip(Ls_opto_avg,0,1)
 
@@ -294,11 +297,16 @@ Ls_D = Ls_opto_avg - Ls_avg
 gkw = dict(height_ratios=(1,0.05))
 fig , axes = plt.subplots(nrows=2, ncols=3, figsize=[10,4.6], gridspec_kw=gkw)
 
+# axes[0,0].plot(tt_dc,tt_dc,':',alpha=0.35,color='w')
+# axes[0,1].plot(tt_dc,tt_dc,':',alpha=0.35,color='w')
+# axes[0,2].plot(tt_dc,tt_dc,':',alpha=0.35,color='k')
+
 ext = (tt_dc[0],tt_dc[-1],tt_dc[0],tt_dc[-1])
 v = 0.1
+import colorcet as cc
 kw = dict(vmin=0, vmax=0.25, cmap='viridis', extent=ext, origin="bottom")
 kw_D = dict(vmin=-v,vmax=v,cmap='PiYG', extent=ext, origin="bottom")
-kw_bar = dict(orientation="horizontal",label="normed p", shrink=0.8)
+kw_bar = dict(orientation="horizontal",label="p above chance", shrink=0.8)
 
 im = axes[0,0].matshow(Ls_avg.T,**kw)
 fig.colorbar(im,cax=axes[1,0],**kw_bar)
@@ -307,15 +315,11 @@ im = axes[0,1].matshow(Ls_opto_avg.T,**kw)
 fig.colorbar(im,cax=axes[1,1],**kw_bar)
 
 im = axes[0,2].matshow(Ls_D.T,**kw_D)
-fig.colorbar(im,cax=axes[1,2],orientation="horizontal",label="stim - no stim", shrink=0.8)
+fig.colorbar(im,cax=axes[1,2],orientation="horizontal",label="difference", shrink=0.8)
 
-# axes[0,0].plot(tt_dc,tt_dc,':',lw=2, color='w')
-# axes[0,1].plot(tt_dc,tt_dc,':',lw=2, color='w')
-# axes[0,2].plot(tt_dc,tt_dc,':',lw=2, color='k')
-
-axes[0,0].set_title('decoding VPL only')
-axes[0,1].set_title('decoding VPL+SNc stim')
-axes[0,2].set_title('difference')
+axes[0,0].set_title('VPL stim only')
+axes[0,1].set_title('VPL/SNc stim x-decoded')
+axes[0,2].set_title('VPL/SNc stim - VPL stim')
 
 axes[0,0].get_shared_x_axes().join(axes[0,0], axes[0,1])
 axes[0,0].get_shared_x_axes().join(axes[0,0], axes[0,2])
@@ -325,6 +329,7 @@ axes[0,0].get_shared_y_axes().join(axes[0,0], axes[0,2])
 
 for ax in axes[0,:]:
     add_stim(ax,vpl_stim,axis='xy',DA=False)
+    # add_epoch(ax, vpl_stim, above=True, axis='xy')
 
     ax.set_aspect('equal')
     ax.set_xlabel('real time (s)')
@@ -334,31 +339,13 @@ for ax in axes[0,:]:
     ax.set_xlim(tt_dc[0],tt_dc[-1])
     ax.set_ylim(tt_dc[0],tt_dc[-1])
 
+for ax in axes[0,:]:
+    ax.set_ylim(tt_dc[0],2.25)
+    ax.set_xlim(tt_dc[0],2.25)
+
 fig.tight_layout()
-
-# %%
-colors = sns.color_palette('viridis',n_colors=tt_dc.shape[0])
-fig, axes = plt.subplots()
-
-ysep = 0.0
-for i in range(tt_dc.shape[0]):
-    axes.plot(tt_dc,Ls_avg[i,:]+i*ysep,lw=1,alpha=0.8,color=colors[i])
-    idx = sp.argmax(Ls_avg[i,:])
-    axes.plot(tt_dc[idx],Ls_avg[i,idx]+i*ysep,'.',alpha=0.5,color=colors[i])
-
-
-# %% plot real time vs decoded time
-fig, axes = plt.subplots()
-tt_decoded = tt_dc[sp.argmax(Ls_avg,axis=1)]
-tt_decoded_opto = tt_dc[sp.argmax(Ls_opto_avg,axis=1)]
-
-axes.plot(tt_dc,tt_decoded,'.',color='firebrick',alpha=0.8)
-axes.plot(tt_dc,tt_decoded_opto,'.',color='darkcyan',alpha=0.8)
-axes.plot(tt_dc,tt_dc,':',alpha=0.5,color='k')
-axes.set_ylabel('decoded time (s)')
-axes.set_xlabel('real time (s)')
-
-add_stim(axes,vpl_stim,axis='x',DA=False)
+fig.savefig('decoding_result_labelperm.png',dpi=331)
+fig.savefig('decoding_result_labelperm.svg',dpi=331)
 
 """
  

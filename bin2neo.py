@@ -140,7 +140,7 @@ sep = analysis_params.depth_sep
 if 1:
     fig, axes = plt.subplots(figsize=[2.915, 4.325])
     bins = sp.arange(-4000,0,100)
-    axes.hist(Df.depth,bins=bins,color='cornflowerblue',orientation='horizontal')
+    axes.hist(Df.depth,bins=bins,orientation='horizontal')
     axes.set_ylabel("depth on probe (µm)")
     axes.set_xlabel("count")
     axes.set_title("unit count by depth")
@@ -330,12 +330,66 @@ fig.tight_layout()
 """
 # %% 
 import elephant as ele
-u = 0
-St = Seg.spiketrains[21]
-bst = ele.conversion.BinnedSpikeTrain(St,binsize=1*pq.ms)
+us = [0,1,21,3,4,5,6]
+fig, axes = plt.subplots(nrows=len(us),sharex=True,figsize=[3,5])
+for i,u in enumerate(us):
+    St = Seg.spiketrains[u]
+    bst = ele.conversion.BinnedSpikeTrain(St,binsize=1*pq.ms)
 
-asig, inds = ele.spike_train_correlation.cross_correlation_histogram(bst,bst,window=(-150,150))
-asig[sp.where(inds==0)[0]] = 0
-plt.plot(asig.times,asig)
+    asig, inds = ele.spike_train_correlation.cross_correlation_histogram(bst,bst,window=(-50,50))
+    asig[sp.where(inds==0)[0]] = 0
+    x = inds
+    y = asig.magnitude.flatten()
+    axes[i].fill_between(x,y, step='mid')
+    axes[i].axvspan(-1.5,1.5,color='gray',lw=0,alpha=0.5)
+
+fig.suptitle('spiketrain autocorrelations')
+sns.despine(fig=fig)
+axes[-1].set_xlabel('lag (ms)')
+for ax in axes:
+    ax.set_yticks([])
+
+fig.savefig('autocorr.png',dpi=331)
 
 # %%
+
+"""
+ 
+             _ _        _             _           
+   ___ _ __ (_) | _____| |_ _ __ __ _(_)_ __  ___ 
+  / __| '_ \| | |/ / _ \ __| '__/ _` | | '_ \/ __|
+  \__ \ |_) | |   <  __/ |_| | | (_| | | | | \__ \
+  |___/ .__/|_|_|\_\___|\__|_|  \__,_|_|_| |_|___/
+      |_|                                         
+ 
+"""
+from helpers import add_epoch
+
+fig, axes = plt.subplots(figsize=[7.5,3.8])
+t_start = 123*pq.s
+t_stop = t_start + 35*pq.s
+
+seg = Seg.time_slice(t_start,t_stop)
+
+for St in seg.spiketrains:
+    depth = St.annotations['depth']
+    if St.annotations['area'] == 'STR':
+        color = '#1f77b4'
+    else:
+        color = 'gray'
+    axes.plot(St.times,sp.ones(St.times.shape)*depth,'o',markersize=.5,color=color,alpha=0.75)
+    
+    hmin, hmax = 1.01, 1.05
+
+    for time in seg.events[0].times:
+        axes.axvspan(time+0.25*pq.s, time+0.5*pq.s,hmin,hmax,clip_on=False,alpha=0.5,color='firebrick',linewidth=0)
+    # for epoch in seg.epochs:
+    #     if epoch.annotations['label'] == 'VPL_stims':
+    #         for time in epoch.times:
+            # add_epoch(axes,epoch,color='firebrick', alpha=0.25, linewidth=2,above=True)   
+
+sns.despine(fig=fig)
+axes.set_ylabel('depth (µm)')
+axes.set_xlabel('time (s)')
+fig.tight_layout()
+fig.savefig('spiketrains_depth.png',dpi=331)

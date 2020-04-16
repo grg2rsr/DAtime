@@ -80,17 +80,11 @@ stim_inds = StimsDf_sub.groupby('opto').get_group('red').index
 opto_inds = StimsDf_sub.groupby('opto').get_group('both').index
 
 
-# %% stimulus selection
-stim_k = 2 # the stim to analyze 
+# %% STIMULUS SELECTION
+stim_k = 1 # the stim to analyze 
 stim_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'red')).index
 opto_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'both')).index
 
-# %% REVERSED stimulus selection
-# stim_k = 1 # the stim to analyze 
-# opto_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'red')).index
-# stim_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'both')).index
-
-# %% actual data slicing
 Rates_ = Rates[:,stim_inds]
 Rates_opto_ = Rates[:,opto_inds]
 
@@ -100,34 +94,22 @@ nUnits = Rates_.shape[0]
 # keep an epoch
 vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
 
-# %% STR vs CX 
-# FIXME this requires going back all the way
+# %% UNIT SELECTION
 area = 'STR'
-Sts = Segs[0].spiketrains
-# d = [st.annotations['depth'] - 4000 for st in Sts]
-# depth_sep = -1700
 
-# for st in Sts:
-#     depth = st.annotations['depth'] - 4000
-#     if depth < depth_sep:
-#         st.annotate(area='STR')
-#     else:
-#         st.annotate(area='CX')
+StatsDf = pd.read_csv(bin_file.with_suffix('.stim_stats.csv'))
+unit_ids = StatsDf.groupby(('area','sig')).get_group((area,True))['unit_id'].unique()
 
-str_inds = sp.where([s.annotations['area'] == 'STR' for s in Segs[0].spiketrains])[0]
-cx_inds = sp.where([s.annotations['area'] == 'CX' for s in Segs[0].spiketrains])[0]
+# get corresponding indices to unit_ids
+all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
+unit_ix = [all_ids.index(id) for id in unit_ids]
 
-if area == 'STR':
-    Rates_ = Rates_[str_inds,:]
-    Rates_opto_ = Rates_opto_[str_inds,:]
-
-if area == 'CX':
-    Rates_ = Rates_[cx_inds,:]
-    Rates_opto_ = Rates_opto_[cx_inds,:]
+# subset
+Rates_ = Rates_[unit_ix,:]
+Rates_opto_ = Rates_opto_[unit_ix,:]
 
 nTrials = stim_inds.shape[0]
 nUnits = Rates_.shape[0]
-
 
 
 """
@@ -164,7 +146,7 @@ dt = 0.01
 tt_dc = sp.arange(-0.25,2.75,dt)
 
 # firing rate vector and binning
-dr = 0.1
+dr = 0.2
 rr = sp.arange(-4,4,dr)
 
 Ls_avgs = sp.zeros((tt_dc.shape[0],tt_dc.shape[0],k))
@@ -265,7 +247,7 @@ area = 'STR'
 dt = 0.01
 
 # dt = 0.01
-tt_dc = sp.arange(-0.25,3.25,dt)
+tt_dc = sp.arange(-0.25,2.75,dt)
 stim_k = 1
 
 out_path = bin_file.with_suffix('.decoder.vpl.'+area+'.k%1d.dt=%.3f.npy'%(stim_k,dt))
@@ -300,11 +282,11 @@ vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
 Ls_avg = sp.average(Ls_avgs,axis=2)
 Ls_opto_avg = sp.average(Ls_opto_avgs,axis=2)
 
-Ls_chance_avg = sp.average(Ls_chance_avgs,axis=2)
+Ls_chance_avg = sp.average(Ls_chance_avgs,axis=2) + 1.64*sp.std(Ls_chance_avgs,axis=2)
 Ls_avg = Ls_avg - Ls_chance_avg
 Ls_avg = sp.clip(Ls_avg,0,1)
 
-Ls_chance_opto_avg = sp.average(Ls_chance_opto_avgs,axis=2)
+Ls_chance_opto_avg = sp.average(Ls_chance_opto_avgs,axis=2) + 1.64*sp.std(Ls_chance_opto_avgs,axis=2)
 Ls_opto_avg = Ls_opto_avg - Ls_chance_opto_avg
 Ls_opto_avg = sp.clip(Ls_opto_avg,0,1)
 
@@ -313,12 +295,16 @@ Ls_D = Ls_opto_avg - Ls_avg
 gkw = dict(height_ratios=(1,0.05))
 fig , axes = plt.subplots(nrows=2, ncols=3, figsize=[10,4.6], gridspec_kw=gkw)
 
+# axes[0,0].plot(tt_dc,tt_dc,':',alpha=0.35,color='w')
+# axes[0,1].plot(tt_dc,tt_dc,':',alpha=0.35,color='w')
+# axes[0,2].plot(tt_dc,tt_dc,':',alpha=0.35,color='k')
+
 ext = (tt_dc[0],tt_dc[-1],tt_dc[0],tt_dc[-1])
 v = 0.1
 import colorcet as cc
 kw = dict(vmin=0, vmax=0.25, cmap='viridis', extent=ext, origin="bottom")
 kw_D = dict(vmin=-v,vmax=v,cmap='PiYG', extent=ext, origin="bottom")
-kw_bar = dict(orientation="horizontal",label="normed p", shrink=0.8)
+kw_bar = dict(orientation="horizontal",label="p above chance", shrink=0.8)
 
 im = axes[0,0].matshow(Ls_avg.T,**kw)
 fig.colorbar(im,cax=axes[1,0],**kw_bar)
@@ -327,15 +313,11 @@ im = axes[0,1].matshow(Ls_opto_avg.T,**kw)
 fig.colorbar(im,cax=axes[1,1],**kw_bar)
 
 im = axes[0,2].matshow(Ls_D.T,**kw_D)
-fig.colorbar(im,cax=axes[1,2],orientation="horizontal",label="stim - no stim", shrink=0.8)
+fig.colorbar(im,cax=axes[1,2],orientation="horizontal",label="difference", shrink=0.8)
 
-# axes[0,0].plot(tt_dc,tt_dc,':',lw=2, color='w')
-# axes[0,1].plot(tt_dc,tt_dc,':',lw=2, color='w')
-# axes[0,2].plot(tt_dc,tt_dc,':',lw=2, color='k')
-
-axes[0,0].set_title('decoding VPL only')
-axes[0,1].set_title('decoding VPL+SNc stim')
-axes[0,2].set_title('difference')
+axes[0,0].set_title('VPL stim only')
+axes[0,1].set_title('VPL/SNc stim x-decoded')
+axes[0,2].set_title('VPL/SNc stim - VPL stim')
 
 axes[0,0].get_shared_x_axes().join(axes[0,0], axes[0,1])
 axes[0,0].get_shared_x_axes().join(axes[0,0], axes[0,2])
@@ -354,7 +336,13 @@ for ax in axes[0,:]:
     ax.set_xlim(tt_dc[0],tt_dc[-1])
     ax.set_ylim(tt_dc[0],tt_dc[-1])
 
+for ax in axes[0,:]:
+    ax.set_ylim(tt_dc[0],2.25)
+    ax.set_xlim(tt_dc[0],2.25)
+
 fig.tight_layout()
+fig.savefig('decoding_result.png',dpi=331)
+fig.savefig('decoding_result.svg',dpi=331)
 
 # %%
 colors = sns.color_palette('viridis',n_colors=tt_dc.shape[0])
@@ -411,7 +399,10 @@ artists.append(vline_true)
 
 axes.set_xlabel('decoder input time (s)')
 axes.set_ylabel('p above chance')
-sns.despine(fig, offset=10)
+
+add_epoch(axes,vpl_stim)
+
+sns.despine(fig)
 fig.tight_layout()
 n_history = 10
 history_alphas = sp.linspace(0.5,0,n_history)
@@ -481,17 +472,126 @@ for j in range(n):
 moviewriter.finish()
 
 
-# %% Prt inspect
-u = 10
-fig , axes = plt.subplots()
+"""
+ 
+                     _                        
+    __ _ _ __   __ _| |_ ___  _ __ ___  _   _ 
+   / _` | '_ \ / _` | __/ _ \| '_ ` _ \| | | |
+  | (_| | | | | (_| | || (_) | | | | | | |_| |
+   \__,_|_| |_|\__,_|\__\___/|_| |_| |_|\__, |
+                                        |___/ 
+ 
+"""
+# %% Prt and slicing
+us = [0,1,3]
+fig , axes = plt.subplots(ncols=3,nrows=len(us), figsize=[8,4])
 ext = (tt_dc[0],tt_dc[-1],rr[0],rr[-1])
-axes.matshow(Prt[:,:,u].T,origin='bottom',extent=ext)
-axes.set_aspect('auto')
-axes.set_xlabel('time')
-axes.set_ylabel('firing rate')
+for i,u in enumerate(us):
+    axes[i,0].matshow(Prt[:,:,u].T,origin='bottom',extent=ext)
+    axes[i,0].xaxis.set_ticks_position('bottom')
+    axes[i,0].set_aspect('auto')
+
+    axes[i,0].set_ylim(rr[1],rr[-1])
+    axes[i,0].set_xlim(tt_dc[0],tt_dc[-1])
+    add_epoch(axes[i,0],vpl_stim,axis='x', above=True)
+
+# some deco
+axes[0,0].set_xticklabels([])
+axes[1,0].set_xticklabels([])
+
+axes[2,0].set_xlabel('time (s)')
+axes[1,0].set_ylabel('firing rate (z) ')
+
+rs = [2,1,1.5]
+pts = []
+for i,r in enumerate(rs):
+    r_ix = sp.argmin(sp.absolute(rr-r))
+    pt = Prt[:,r_ix,us[i]]
+    pts.append(pt)
+    axes[i,1].plot(tt_dc,pt)
+    # axes[i,0].axhline(r,linestyle=':',alpha=0.85,color='white')
+    axes[i,1].set_yticks([])
+    
+    sns.despine(ax=axes[i,1],left=True)
+
+
+axes[0,1].get_shared_y_axes().join(axes[0,1], axes[0,2])
+
+pts = sp.stack(pts,axis=1)
+axes[1,2].plot(tt_dc,sp.prod(pts,axis=1))
+axes[1,2].set_yticks([])
+sns.despine(ax=axes[1,2],left=True)
+
+ml_time = tt_dc[sp.argmax(sp.prod(pts,axis=1))]
+axes[1,2].axvline(ml_time,linestyle=':',alpha=0.85,color='red',zorder=-1)
+
+axes[0,2].remove()
+axes[2,2].remove()
+
+axes[0,1].set_xticklabels([])
+axes[1,1].set_xticklabels([])
+
+fig.savefig('Prt_wo_line.svg',dpi=331)
+fig.savefig('Prt_wo_line.png',dpi=331)
+
+for i,r in enumerate(rs):
+    axes[i,0].axhline(r,linestyle=':',alpha=0.85,color='white')
+
+fig.savefig('Prt_w_line.svg',dpi=331)
+fig.savefig('Prt_w_line.png',dpi=331)
 
 
 
+# %% plotting a slice of the Prt 
+fig, axes = plt.subplots()
+u = 1
+t = .6
+t_ix = sp.argmin(sp.absolute(tt_dc - t))
+
+# the KDE
+# axes.plot(rr,Prt[t_ix,:,u])
+
+fig, axes = plt.subplots()
+sns.despine(ax=axes,left=True)
+asigs = Rates_[u,:]
+ysep = 3
+for i,asig in enumerate(asigs):
+    axes.plot(asig.times,asig+i*ysep,color='k',lw=1,alpha=0.75)
+axes.set_xlabel('time (s)')
+axes.set_ylabel('trials')
+axes.set_yticks([])
+
+add_epoch(axes,vpl_stim)
+
+fig.savefig('Prt_construction_example_1.png',dpi=331)
+fig.savefig('Prt_construction_example_1.svg',dpi=331)
+
+dt = sp.diff(tt_dc)[0]
+axes.axvspan(t,t+dt,lw=1,color='teal',alpha=0.5)
+
+fig.savefig('Prt_construction_example_1_line.png',dpi=331)
+fig.savefig('Prt_construction_example_1_line.svg',dpi=331)
+
+# %%
+fig, axes = plt.subplots(figsize=[4,2])
+u = 1
+t = .6
+t_ix = sp.argmin(sp.absolute(tt_dc - t))
+dt = sp.diff(tt_dc)[0]
+
+samples = []
+for i,asig in enumerate(asigs):
+    samples.append(sp.average(asig.time_slice(t*pq.s,t*pq.s+dt*pq.s).magnitude))
+
+axes.hist(samples,bins=rr,density=True,label='data')
+axes.plot(rr,Prt[t_ix,:,u]/dr,lw=2, label='KDE')
+sns.despine(ax=axes)
+axes.set_xlabel('rate (z)')
+axes.set_ylabel('normed count')
+axes.legend(loc='upper left')
+fig.tight_layout()
+fig.savefig('Prt_construction_rates.png',dpi=331)
+fig.savefig('Prt_construction_rates.svg',dpi=331)
 """
  
    _                           _   

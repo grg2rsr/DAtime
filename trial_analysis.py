@@ -37,6 +37,7 @@ from helpers import *
 # %% 
 
 folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0/")
+# folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
 
 os.chdir(folder)
 import analysis_params
@@ -74,7 +75,7 @@ nUnits = len(Segs[0].spiketrains)
 
 # gather pre spikes
 nSpikes = sp.zeros((nUnits,nTrials,2)) # last axis is pre, post
-for i in tqdm(range(nTrials)):
+for i in tqdm(range(nTrials),desc="counting spikes"):
     seg = Segs[i]
     try:
         vpl_stim, = select(seg.epochs, 'VPL_stims')
@@ -87,9 +88,11 @@ for i in tqdm(range(nTrials)):
     nSpikes[:,i,0] = [len(st) for st in seg_sliced.spiketrains]
 
     # post
-    # seg_sliced = seg.time_slice(t_post, t_post + 1*pq.s)
-    seg_sliced = seg.time_slice(t_post + 0.1*pq.s, t_post + 2.9*pq.s)
-    nSpikes[:,i,1] = [len(st)/2.8 for st in seg_sliced.spiketrains]
+    seg_sliced = seg.time_slice(t_post, t_post + 2*pq.s)
+    nSpikes[:,i,1] = [len(st)/2 for st in seg_sliced.spiketrains]
+
+    # seg_sliced = seg.time_slice(t_post + 0.1*pq.s, t_post + 2.9*pq.s)
+    # nSpikes[:,i,1] = [len(st)/2.8 for st in seg_sliced.spiketrains]
 
 # save the result
 out_path = bin_file.with_suffix('.pre_post_spikes.npy')
@@ -146,7 +149,7 @@ unit_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
 Data = pd.DataFrame(dSpikes.T,columns=unit_ids,index=range(nTrials))
 
 # lagged prev reg
-StimsDf['prev_blue'] = sp.roll(StimsDf['blue'],-1)
+# StimsDf['prev_blue'] = sp.roll(StimsDf['blue'],-1)
 
 Df = pd.concat([StimsDf,Data],axis=1)
 Dfm = pd.melt(Df,id_vars=StimsDf.columns,var_name='unit_id',value_name='dSpikes')
@@ -178,9 +181,6 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import patsy
 
-# formula = 'dSpikes ~ 1 + stim_id'
-# formula = 'post ~ 1 + pre + stim_id'
-# formula = 'post ~ 1 + pre'
 formula = "nSpikes ~ 1 + when"
 
 StatsDf = pd.DataFrame(columns=['unit_id','stim_id','p','m'])
@@ -188,7 +188,6 @@ Df_pvalues = []
 Df_params = []
 for stim_id in pd.unique(Dfm['stim_id']):
     for unit in tqdm(unit_ids):
-        # data = Dfm.groupby(['unit_id','opto','stim_id']).get_group((unit,'red',0))
         data = Dfmm.groupby(['unit_id','stim_id','opto']).get_group((unit,stim_id,'red'))
 
         dmatrix = patsy.dmatrices(formula, data=data)[1]
@@ -207,11 +206,7 @@ for stim_id in pd.unique(Dfm['stim_id']):
 
         Df_pvalues.append(pvalues)
         Df_params.append(params)
-        # p = res.pvalues['when[T.post]']
-        # m = res.params['when[T.post]']
 
-        # StatsDf = StatsDf.append(pd.DataFrame([[unit,stim_id,p,m,]],columns=StatsDf.columns))
-# StatsDf = StatsDf.reset_index(drop=True)
 Df_pvalues = pd.DataFrame(Df_pvalues)
 Df_params = pd.DataFrame(Df_params)
 
@@ -221,18 +216,7 @@ StatsDf = pd.concat([Df_params[['unit','stim_id',key]],Df_pvalues[key]],axis=1)
 StatsDf.columns = ['unit_id','stim_id','m','p']
 StatsDf[['unit_id','stim_id']] = StatsDf[['unit_id','stim_id']].astype('int')
 
-# %% adding depth info to StatsDf FIXME
-
 Sts = Segs[0].spiketrains
-# d = [st.annotations['depth'] - 4000 for st in Sts]
-# depth_sep = -1700
-
-# for st in Sts:
-#     depth = st.annotations['depth'] - 4000
-#     if depth < depth_sep:
-#         st.annotate(area='STR')
-#     else:
-#         st.annotate(area='CX')
 
 depthDf = pd.DataFrame([(st.annotations['id'],st.annotations['area']) for st in Sts],columns=['unit_id','area'])
 StatsDf = pd.merge(StatsDf,depthDf,on='unit_id')
@@ -287,20 +271,15 @@ for k, stim_id in enumerate(range(nStims)):
 fig.tight_layout()
 
 # %%
+# adding area info to Dfm to make my life easier
+for i,row in StatsDf.groupby('stim_id').get_group(stim_id).iterrows():
+    Dfm.loc[Dfm['unit_id'] == row['unit_id'],'area'] = row['area']
 
-"""
- 
-                                    _    
-   _ __  _ __ ___   _ __   ___  ___| |_  
-  | '_ \| '__/ _ \ | '_ \ / _ \/ __| __| 
-  | |_) | | |  __/ | |_) | (_) \__ \ |_  
-  | .__/|_|  \___| | .__/ \___/|___/\__| 
-  |_|              |_|                   
- 
-"""
-# %% 
-stim_id = 2
-sort_ids = Dfm.groupby('unit_id').mean()['dSpikes'].sort_values().index
+# %% STRIP PLOT 
+stim_id = 1
+area = 'STR'
+
+sort_ids = Dfm.groupby(('area','unit_id')).mean().loc[area,'dSpikes'].sort_values().index
 
 # get corresponding indices to unit_ids
 all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
@@ -308,80 +287,53 @@ sort_ix = [all_ids.index(id) for id in sort_ids]
 
 nUnits = len(sort_ids)
 
-# %%
-StatsDf['downmod'] = sp.logical_and(StatsDf['m'] < 0, StatsDf['p'] < 0.025)
-stats = StatsDf.groupby('stim_id').get_group(stim_id)
+StatsDf['downmod'] = sp.logical_and(StatsDf['m'] < 0, StatsDf['p'] < 0.05)
+stats = StatsDf.groupby(('area','stim_id')).get_group((area,stim_id))
 stats['colors'] = 'gray'
-stats.loc[stats['upmod']==True,'colors'] = 'red'
-stats.loc[stats['downmod']==True,'colors'] = 'blue'
+
+cmap = plt.get_cmap('PiYG')
+
+stats.loc[stats['upmod']==True,'colors'] = 'deepskyblue'
+stats.loc[stats['downmod']==True,'colors'] = '#d62728'
 stats.index = stats['unit_id']
 colors = [stats.loc[id,'colors'] for id in sort_ids]
 
-# %% strip plot
-data = Dfm.groupby(('stim_id','opto')).get_group((stim_id,'red'))
-# kw = dict()
-fig, axes = plt.subplots(figsize=[11,3])
+data = Dfm.groupby(('area','stim_id','opto')).get_group((area,stim_id,'red'))
 
-plot = sns.stripplot(ax=axes, x='unit_id', order=sort_ids, y='dSpikes',data=data,size=1)
+
+gkw = dict(width_ratios=(1,0.025))
+fig, axes = plt.subplots(nrows=2,ncols=2,figsize=[9,3],gridspec_kw=gkw)
+
+plot = sns.stripplot(ax=axes[0,0], x='unit_id', order=sort_ids, y='dSpikes',data=data,size=1)
 # axes.axhline(0,lw=1,linestyle=':',color='k',alpha=0.5)
 
 for i,collection in enumerate(plot.collections):
     collection.set_facecolor(colors[i])
 
+axes[0,0].set_ylim(-45.45)
+axes[0,0].set_ylabel('∆spikes')
+axes[0,0].set_xlabel('')
+axes[0,0].set_xticks([])
+sns.despine(ax=axes[0,0],bottom=True)
 
-axes.set_ylabel('∆spikes')
-axes.set_xlabel('units')
-axes.set_xticks([])
-sns.despine(ax=axes,bottom=True)
-
-# for i,artist in enumerate(bplt.artists):
-    # artist.set_facecolor(colors[i])
-
-# %% lines
-fig, axes = plt.subplots()
+# fig, axes = plt.subplots(nrows=3,ncols=2,figsize=[5,5],gridspec_kw=gkw)
+# fig, axes = plt.subplots(ncols=2, figsize=[11,3], gridspec_kw=gkw)
 
 # get corresponding indices to unit_ids
 all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
 sort_ix = [all_ids.index(id) for id in sort_ids]
 stim_inds = StimsDf.groupby(('stim_id','opto')).get_group((stim_id,'red')).index
 
-axes.matshow(dSpikes[sort_ix,:][:,stim_inds].T,vmin=-15,vmax=15,cmap='PiYG')
-# axes.matshow(dSpikes[sort_ix,:])
+im = axes[1,0].matshow(dSpikes[sort_ix,:][:,stim_inds].T,vmin=-15,vmax=15,cmap='PiYG')
+cbar = fig.colorbar(im, cax=axes[1,1], shrink=0.75,label='∆spikes')
 
-axes.set_ylabel('cell id')
-axes.set_xlabel('stim #')
-axes.set_aspect('auto')
-# fig.suptitle('∆spikes in 1s, post - pre')
+axes[1,0].set_xlabel('units')
+axes[1,0].set_ylabel('stim #')
+axes[1,0].set_aspect('auto')
 
-# cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.75,label='∆spikes')
-
-
-
-
-
-
-
-
-
-# %% plot salt n pepper image
-nStimClasses = len(StimsDf.groupby('stim_id'))
-
-fig, axes = plt.subplots(ncols=nStimClasses, figsize=[5.285, 4.775], sharey=True)
-for k in range(nStimClasses):
-    inds = StimsDf.groupby(['stim_id','opto']).get_group((k,'red')).index
-    im = axes[k].matshow(dSpikes[:,inds])
-    
-axes[0].set_ylabel('cell id')
-axes[1].set_xlabel('stim #')
-fig.suptitle('∆spikes in 1s, post - pre')
-
-cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.75,label='∆spikes')
-
-for ax in axes:
-    ax.set_xticklabels([])
-
-# this could be kept as a helper
-# sts = [st for st in seg.spiketrains if st.annotations['id'] in stim_inds]
+axes[0,1].remove()
+fig.tight_layout()
+fig.savefig('/home/georg/Desktop/ciss/stripandpepper.png',dpi=331)
 
 
 
@@ -417,7 +369,7 @@ for i,j in enumerate(ix):
     Rates[:,i] = Segs[j].analogsignals
 
 # %% splitting
-
+import colorcet as cc
 # plotting helper
 def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
     """ takes the Rates array with all info and plots only the subset """
@@ -438,68 +390,69 @@ def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
         sort_inds = order 
 
     ext = (r.times[0],r.times[-1],0,nUnits)
-    im = axes.matshow(r_avgs.T[sort_inds,:],cmap='inferno',origin='bottom',extent=ext,vmin=-1,vmax=3)
+    im = axes.matshow(r_avgs.T[sort_inds,:],cmap='viridis',origin='bottom',extent=ext,vmin=-1,vmax=3)
     axes.set_aspect('auto')
 
     return axes, im, r_avgs, sort_inds
 
 # gather indices
-stim_id = 2
+stim_id = 1
+area = 'STR'
 stim_inds = StimsDf.groupby(('opto','stim_id')).get_group(('red',stim_id)).index
 stim_inds_opto = StimsDf.groupby(('opto','stim_id')).get_group(('both',stim_id)).index
 
-sig_mod_unit_ids = StatsDf.groupby(('area','stim_id','sig')).get_group(('STR',stim_id,True))['unit_id'].unique()
+sig_mod_unit_ids = StatsDf.groupby(('area','stim_id','sig')).get_group((area,stim_id,True))['unit_id'].unique()
 
 # get corresponding indices to unit_ids
 all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
 sig_mod_unit_ix = [all_ids.index(id) for id in sig_mod_unit_ids]
 
-
-gkw = dict(width_ratios=(1,0.05))
-fig, axes = plt.subplots(nrows=3,ncols=2,figsize=[5,5],gridspec_kw=gkw)
-
-# axes[0,0].get_shared_x_axes().join(axes[0,0], axes[0,1])
-# axes[0,0].get_shared_x_axes().join(axes[0,0], axes[0,2])
-
-# axes[0,0].get_shared_y_axes().join(axes[0,0], axes[0,1])
-# axes[0,0].get_shared_y_axes().join(axes[0,0], axes[0,2])
+gkw = dict(height_ratios=(1,0.075))
+fig, axes = plt.subplots(nrows=2,ncols=3,figsize=[9,3.6],gridspec_kw=gkw)
 
 ax, im, r_avgs_vpl, order = plot_average_rates(Rates, stim_inds, sig_mod_unit_ix, axes=axes[0,0])
-fig.colorbar(im,cax=axes[0,1],label="firing rate(z)", shrink=0.8)
+fig.colorbar(im,cax=axes[1,0],orientation='horizontal',label="firing rate(z)", shrink=0.8)
 
-ax, im, r_avgs_da, order = plot_average_rates(Rates, stim_inds_opto, sig_mod_unit_ix, order=order, axes=axes[1,0])
-fig.colorbar(im,cax=axes[1,1],label="firing rate(z)", shrink=0.8)
+ax, im, r_avgs_da, order = plot_average_rates(Rates, stim_inds_opto, sig_mod_unit_ix, order=order, axes=axes[0,1])
+fig.colorbar(im,cax=axes[1,1],orientation='horizontal',label="firing rate(z)", shrink=0.8)
 
 r_avgs_d = r_avgs_da - r_avgs_vpl
 r = Rates[0,0]
 ext = (r.times[0],r.times[-1],0,r_avgs_d.shape[1])
-im = axes[2,0].matshow(r_avgs_d.T[order,:],cmap='PiYG',extent=ext,origin='bottom',vmin=-1,vmax=1)
-axes[2,0].set_aspect('auto')
-fig.colorbar(im,cax=axes[2,1],label="difference", shrink=0.8)
+im = axes[0,2].matshow(r_avgs_d.T[order,:],cmap='PiYG',extent=ext,origin='bottom',vmin=-1,vmax=1)
+axes[0,2].set_aspect('auto')
+fig.colorbar(im,cax=axes[1,2],orientation='horizontal',label="difference", shrink=0.8)
 
 vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
 da_stim, = select(Segs[stim_inds_opto[0]].epochs,'DA_stims')
 
-for ax in axes[:,0]:
-    add_epoch(ax,vpl_stim,color='firebrick')
-    add_epoch(ax,vpl_stim,color='firebrick',above=True)
+for ax in axes[0,:]:
+    add_epoch(ax,vpl_stim,color='firebrick', linewidth=0.5)
+    add_epoch(ax,vpl_stim,color='firebrick',above=True, linewidth=1)
 
-add_epoch(axes[1,0],da_stim,color='darkcyan',above=True)
-add_epoch(axes[2,0],da_stim,color='darkcyan',above=True)
+# add_epoch(axes[0,1],da_stim,color='darkcyan',above=True)
+# add_epoch(axes[0,2],da_stim,color='darkcyan',above=True)
 
-axes[2,0].xaxis.set_ticks_position('bottom')
-axes[2,0].set_xlabel('time (s)')
-axes[1,0].set_ylabel('units')
-axes[0,0].set_title('VPL stim',fontsize=10)
-axes[1,0].set_title('VPL + SNc/VTA stim',fontsize=10)
-axes[2,0].set_title('stim - no stim',fontsize=10)
 
-axes[0,0].set_xticklabels([])
-axes[1,0].set_xticklabels([])
+for ax in axes[0,:]:
+    ax.xaxis.set_ticks_position('bottom')
+    ax.set_xlabel('time (s)')
+axes[0,0].set_ylabel('units')
+
+
+axes[0,0].set_title('VPL',fontsize=10)
+axes[0,1].set_title('VPL/SNc',fontsize=10)
+axes[0,2].set_title('VPL/SNc - VPL stim',fontsize=10)
+
+axes[0,1].set_yticklabels([])
+axes[0,2].set_yticklabels([])
+
+for ax in axes[0,:]:
+    ax.set_xlim(-0.0,1)
 
 fig.tight_layout()
-fig.subplots_adjust(wspace=0.01,hspace=0.3)
-    
+# fig.subplots_adjust(wspace=0.01,hspace=0.3)
+# fig.savefig('/home/georg/Desktop/ciss/avg_activity.png',dpi=331)    
 
 
 
