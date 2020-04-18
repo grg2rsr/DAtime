@@ -70,16 +70,6 @@ for j in range(nTrials):
     Rates[:,j] = Segs[j].analogsignals
 
 
-# %% insert here the permutation
-stim_k = 2 # the stim to analyze 
-StimsDf_sub = StimsDf.groupby('stim_id').get_group(stim_k)
-opto_labels = StimsDf_sub['opto'].values
-sp.random.shuffle(opto_labels)
-StimsDf_sub['opto'] = opto_labels
-stim_inds = StimsDf_sub.groupby('opto').get_group('red').index
-opto_inds = StimsDf_sub.groupby('opto').get_group('both').index
-
-
 # %% STIMULUS SELECTION
 stim_k = 1 # the stim to analyze 
 stim_inds = StimsDf.groupby(['stim_id','opto']).get_group((stim_k,'red')).index
@@ -282,11 +272,13 @@ vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
 Ls_avg = sp.average(Ls_avgs,axis=2)
 Ls_opto_avg = sp.average(Ls_opto_avgs,axis=2)
 
-Ls_chance_avg = sp.average(Ls_chance_avgs,axis=2) + 1.64*sp.std(Ls_chance_avgs,axis=2)
+ch_lvl = 1.64
+
+Ls_chance_avg = sp.average(Ls_chance_avgs,axis=2) + ch_lvl*sp.std(Ls_chance_avgs,axis=2)
 Ls_avg = Ls_avg - Ls_chance_avg
 Ls_avg = sp.clip(Ls_avg,0,1)
 
-Ls_chance_opto_avg = sp.average(Ls_chance_opto_avgs,axis=2) + 1.64*sp.std(Ls_chance_opto_avgs,axis=2)
+Ls_chance_opto_avg = sp.average(Ls_chance_opto_avgs,axis=2) + ch_lvl*sp.std(Ls_chance_opto_avgs,axis=2)
 Ls_opto_avg = Ls_opto_avg - Ls_chance_opto_avg
 Ls_opto_avg = sp.clip(Ls_opto_avg,0,1)
 
@@ -294,10 +286,6 @@ Ls_D = Ls_opto_avg - Ls_avg
 
 gkw = dict(height_ratios=(1,0.05))
 fig , axes = plt.subplots(nrows=2, ncols=3, figsize=[10,4.6], gridspec_kw=gkw)
-
-# axes[0,0].plot(tt_dc,tt_dc,':',alpha=0.35,color='w')
-# axes[0,1].plot(tt_dc,tt_dc,':',alpha=0.35,color='w')
-# axes[0,2].plot(tt_dc,tt_dc,':',alpha=0.35,color='k')
 
 ext = (tt_dc[0],tt_dc[-1],tt_dc[0],tt_dc[-1])
 v = 0.1
@@ -326,7 +314,8 @@ axes[0,0].get_shared_y_axes().join(axes[0,0], axes[0,1])
 axes[0,0].get_shared_y_axes().join(axes[0,0], axes[0,2])
 
 for ax in axes[0,:]:
-    add_stim(ax,vpl_stim,axis='xy',DA=False)
+    # add_stim(ax,vpl_stim,axis='xy',DA=False)
+    add_epoch(ax,vpl_stim,axis='xy',linewidth=0,alpha=0.5)
 
     ax.set_aspect('equal')
     ax.set_xlabel('real time (s)')
@@ -341,8 +330,19 @@ for ax in axes[0,:]:
     ax.set_xlim(tt_dc[0],2.25)
 
 fig.tight_layout()
-fig.savefig('decoding_result.png',dpi=331)
-fig.savefig('decoding_result.svg',dpi=331)
+fig.savefig('/home/georg/Desktop/ciss/decoding_result_full.png',dpi=331)
+
+for ax in axes[0,:]:
+    ax.set_ylim(0.42,1.65)
+    ax.set_xlim(0.42,1.65)
+
+axes[0,0].plot(tt_dc,tt_dc,':',alpha=0.35,color='w')
+axes[0,1].plot(tt_dc,tt_dc,':',alpha=0.35,color='w')
+axes[0,2].plot(tt_dc,tt_dc,':',alpha=0.35,color='k')
+
+fig.savefig('/home/georg/Desktop/ciss/decoding_result_zoom.png',dpi=331)
+
+# fig.savefig('/home/georg/Desktop/ciss/decoding_result.svg',dpi=331)
 
 # %%
 colors = sns.color_palette('viridis',n_colors=tt_dc.shape[0])
@@ -483,7 +483,7 @@ moviewriter.finish()
  
 """
 # %% Prt and slicing
-us = [0,1,3]
+us = [1,2,3]
 fig , axes = plt.subplots(ncols=3,nrows=len(us), figsize=[8,4])
 ext = (tt_dc[0],tt_dc[-1],rr[0],rr[-1])
 for i,u in enumerate(us):
@@ -531,14 +531,14 @@ axes[2,2].remove()
 axes[0,1].set_xticklabels([])
 axes[1,1].set_xticklabels([])
 
-fig.savefig('Prt_wo_line.svg',dpi=331)
-fig.savefig('Prt_wo_line.png',dpi=331)
+fig.savefig('/home/georg/Desktop/ciss/Prt_wo_line.svg',dpi=331)
+fig.savefig('/home/georg/Desktop/ciss/Prt_wo_line.png',dpi=331)
 
 for i,r in enumerate(rs):
     axes[i,0].axhline(r,linestyle=':',alpha=0.85,color='white')
 
-fig.savefig('Prt_w_line.svg',dpi=331)
-fig.savefig('Prt_w_line.png',dpi=331)
+fig.savefig('/home/georg/Desktop/ciss/Prt_w_line.svg',dpi=331)
+fig.savefig('/home/georg/Desktop/ciss/Prt_w_line.png',dpi=331)
 
 
 
@@ -563,35 +563,54 @@ axes.set_yticks([])
 
 add_epoch(axes,vpl_stim)
 
-fig.savefig('Prt_construction_example_1.png',dpi=331)
-fig.savefig('Prt_construction_example_1.svg',dpi=331)
+# fig.savefig('Prt_construction_example_1.png',dpi=331)
+# fig.savefig('Prt_construction_example_1.svg',dpi=331)
 
 dt = sp.diff(tt_dc)[0]
 axes.axvspan(t,t+dt,lw=1,color='teal',alpha=0.5)
 
-fig.savefig('Prt_construction_example_1_line.png',dpi=331)
-fig.savefig('Prt_construction_example_1_line.svg',dpi=331)
+# fig.savefig('Prt_construction_example_1_line.png',dpi=331)
+# fig.savefig('Prt_construction_example_1_line.svg',dpi=331)
 
 # %%
-fig, axes = plt.subplots(figsize=[4,2])
+fig, axes = plt.subplots(figsize=[2,4])
 u = 1
 t = .6
 t_ix = sp.argmin(sp.absolute(tt_dc - t))
 dt = sp.diff(tt_dc)[0]
 
+asigs = Rates_[u,:]
+
 samples = []
 for i,asig in enumerate(asigs):
     samples.append(sp.average(asig.time_slice(t*pq.s,t*pq.s+dt*pq.s).magnitude))
 
-axes.hist(samples,bins=rr,density=True,label='data')
-axes.plot(rr,Prt[t_ix,:,u]/dr,lw=2, label='KDE')
+axes.hist(samples,orientation='horizontal',bins=rr,density=True,label='data')
+# one color line
+# axes.plot(rr,Prt[t_ix,:,u]/dr,lw=2, label='KDE')
+axes.plot(Prt[t_ix,:,u]/dr,rr,lw=2, label='KDE')
+
+# multi color line
+if 0:
+    import numpy as np
+    vmin = np.min(Prt[t_ix,:,u]/dr)
+    vmax = np.max(Prt[t_ix,:,u]/dr)
+    norm = mpl.colors.Normalize(vmin,vmax)
+    cmap = mpl.cm.ScalarMappable(norm,'viridis')
+
+    for i in range(rr.shape[0]-1):
+        col = cmap.to_rgba(Prt[t_ix,i,u]/dr)
+        # axes.plot([rr[i],rr[i+1]],[Prt[t_ix,i,u]/dr,Prt[t_ix,i+1,u]/dr],lw=2,color=col)
+        axes.plot([Prt[t_ix,i,u]/dr,Prt[t_ix,i+1,u]/dr],[rr[i],rr[i+1]],lw=2,color=col)
+
 sns.despine(ax=axes)
 axes.set_xlabel('rate (z)')
 axes.set_ylabel('normed count')
-axes.legend(loc='upper left')
+# axes.legend(loc='upper left')
 fig.tight_layout()
-fig.savefig('Prt_construction_rates.png',dpi=331)
-fig.savefig('Prt_construction_rates.svg',dpi=331)
+
+fig.savefig('/home/georg/Desktop/ciss/Prt_construction_horiz_one.png',dpi=331)
+fig.savefig('/home/georg/Desktop/ciss/Prt_construction_horiz_one.svg',dpi=331)
 """
  
    _                           _   

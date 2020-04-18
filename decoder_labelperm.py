@@ -91,7 +91,7 @@ nUnits = Rates_.shape[0]
 stim_k = 1 # the stim to analyze
 StimsDf_sub = StimsDf.groupby('stim_id').get_group(stim_k)
 
-nLabelperm = 10
+nLabelperm = 50
 
 for l in range(nLabelperm):
     opto_labels = StimsDf_sub['opto'].values
@@ -231,7 +231,7 @@ for l in range(nLabelperm):
 """
 
 # %% load
-nLabelperm = 10
+nLabelperm = 20
 area = 'STR'
 dt = 0.01
 tt_dc = sp.arange(-0.25,2.75,dt)
@@ -344,8 +344,8 @@ for ax in axes[0,:]:
     ax.set_xlim(tt_dc[0],2.25)
 
 fig.tight_layout()
-fig.savefig('decoding_result_labelperm.png',dpi=331)
-fig.savefig('decoding_result_labelperm.svg',dpi=331)
+fig.savefig('/home/georg/Desktop/ciss/decoding_result_labelperm.png',dpi=331)
+fig.savefig('/home/georg/Desktop/ciss/decoding_result_labelperm.svg',dpi=331)
 
 """
  

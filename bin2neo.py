@@ -136,22 +136,26 @@ import analysis_params
 importlib.reload(analysis_params)
 sep = analysis_params.depth_sep
 
-# %% inspect
-if 1:
-    fig, axes = plt.subplots(figsize=[2.915, 4.325])
-    bins = sp.arange(-4000,0,100)
-    axes.hist(Df.depth,bins=bins,orientation='horizontal')
-    axes.set_ylabel("depth on probe (µm)")
-    axes.set_xlabel("count")
-    axes.set_title("unit count by depth")
-    sns.despine(fig)
-    
-    axes.axhline(sep,linestyle=':', color='k')
-    fig.tight_layout()
-
 # label
 Df['area'] = 'CX'
 Df.loc[Df['depth'] < sep,'area'] = 'STR'
+
+# %% two colored histogram
+fig, axes = plt.subplots(figsize=[2.915, 4.325])
+bins = sp.arange(-4000,0,100)
+axes.hist(Df['depth'],bins=bins,orientation='horizontal',edgecolor='k',linewidth=2)
+axes.hist(Df.groupby('area').get_group('CX')['depth'],bins=bins,orientation='horizontal',color='gray')
+axes.hist(Df.groupby('area').get_group('STR')['depth'],bins=bins,orientation='horizontal',color='#1f77b4')
+
+axes.set_ylabel("depth on probe (µm)")
+axes.set_xlabel("count")
+axes.set_title("unit count by depth")
+sns.despine(fig)
+
+axes.axhline(sep,linestyle=':', color='k')
+fig.tight_layout()
+fig.savefig('/home/georg/Desktop/ciss/depth_hist_colored.png',dpi=331)
+
 
 # %% write this to the spiketrains
 for i,St in enumerate(SpikeTrains):

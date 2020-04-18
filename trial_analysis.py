@@ -99,6 +99,53 @@ out_path = bin_file.with_suffix('.pre_post_spikes.npy')
 sp.save(out_path,nSpikes)
 
 
+# %% ISI check 
+nTrials = len(Segs)
+nUnits = len(Segs[0].spiketrains)
+
+# gather pre spikes
+Dists = sp.zeros((nUnits,nTrials,2)) # last axis is pre, post
+for i in tqdm(range(5),desc="ISI calculations"): # over nTrials
+    seg = Segs[i]
+    try:
+        vpl_stim, = select(seg.epochs, 'VPL_stims')
+        t_post = vpl_stim.times[-1] + vpl_stim.durations[-1]
+    except:
+        t_post = 0 * pq.s # this calculates the diff through DA only stim
+
+    seg.time_slice(-1*pq.s,0*pq.s).spiketrains
+
+
+
+
+
+# %% or: more unbiased: euclid dists
+nTrials = len(Segs)
+nUnits = len(Segs[0].spiketrains)
+
+# gather pre spikes
+Dists = sp.zeros((nUnits,nTrials,2)) # last axis is pre, post
+for i in tqdm(range(5),desc="euclid dists"): # over nTrials
+    seg = Segs[i]
+    try:
+        vpl_stim, = select(seg.epochs, 'VPL_stims')
+        t_post = vpl_stim.times[-1] + vpl_stim.durations[-1] + 0.1*pqs
+    except:
+        t_post = 0 * pq.s # this calculates the diff through DA only stim
+
+    # euclidean distances
+    asigs_pre_pre = sp.stack([asig.time_slice(-1*pq.s, -0.5*pq.s).magnitude for asig in seg.analogsignals],axis=0)[:,:,0]
+    asigs_pre = sp.stack([asig.time_slice(-0.5*pq.s, 0*pq.s).magnitude for asig in seg.analogsignals],axis=0)[:,:,0]
+    asigs_post = sp.stack([asig.time_slice(t_post, t_post + 0.5*pq.s).magnitude for asig in seg.analogsignals],axis=0)[:,:,0]
+   
+    Dists[:,i,0] = sp.sqrt(sp.sum((asigs_pre_pre - asigs_pre)**2,axis=1))
+    Dists[:,i,1] = sp.sqrt(sp.sum((asigs_post - asigs_pre)**2,axis=1))
+
+
+# save the result
+# out_path = bin_file.with_suffix('.eDists.npy')
+# sp.save(out_path,Dists)
+
 """
  
        _                  
@@ -127,6 +174,7 @@ sp.save(out_path,nSpikes)
 """
 # %%
 path = bin_file.with_suffix('.pre_post_spikes.npy')
+# path = bin_file.with_suffix('.eDists.npy')
 nSpikes = sp.load(path)
 dSpikes = nSpikes[:,:,1] - nSpikes[:,:,0]
 
@@ -228,7 +276,6 @@ StatsDf['upmod'] = sp.logical_and(StatsDf['sig'].values,(StatsDf['m'] > 0).value
 out_path = bin_file.with_suffix('.stim_stats.csv')
 StatsDf.to_csv(out_path)
 
-
 StatsDf.groupby(('stim_id','area')).sum()
 
 # %% or load
@@ -271,15 +318,15 @@ for k, stim_id in enumerate(range(nStims)):
 fig.tight_layout()
 
 # %%
+stim_id = 1
 # adding area info to Dfm to make my life easier
 for i,row in StatsDf.groupby('stim_id').get_group(stim_id).iterrows():
     Dfm.loc[Dfm['unit_id'] == row['unit_id'],'area'] = row['area']
 
-# %% STRIP PLOT 
-stim_id = 1
+# %% NEW STRIP PLOT 
 area = 'STR'
-
-sort_ids = Dfm.groupby(('area','unit_id')).mean().loc[area,'dSpikes'].sort_values().index
+stim_id = 1
+sort_ids = Dfm.groupby(('opto','stim_id','area')).get_group(('red',stim_id,area)).groupby('unit_id').mean()['dSpikes'].sort_values().index
 
 # get corresponding indices to unit_ids
 all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
@@ -293,59 +340,51 @@ stats['colors'] = 'gray'
 
 cmap = plt.get_cmap('PiYG')
 
-stats.loc[stats['upmod']==True,'colors'] = 'deepskyblue'
-stats.loc[stats['downmod']==True,'colors'] = '#d62728'
+stats.loc[stats['upmod']==True,'colors'] = '#d62728'
+stats.loc[stats['downmod']==True,'colors'] = '#1f77b4'
 stats.index = stats['unit_id']
 colors = [stats.loc[id,'colors'] for id in sort_ids]
 
 data = Dfm.groupby(('area','stim_id','opto')).get_group((area,stim_id,'red'))
 
+# gkw = dict(width_ratios=(1,0.025))
+fig, axes = plt.subplots(figsize=[6,3])
 
-gkw = dict(width_ratios=(1,0.025))
-fig, axes = plt.subplots(nrows=2,ncols=2,figsize=[9,3],gridspec_kw=gkw)
-
-plot = sns.stripplot(ax=axes[0,0], x='unit_id', order=sort_ids, y='dSpikes',data=data,size=1)
-# axes.axhline(0,lw=1,linestyle=':',color='k',alpha=0.5)
+plot = sns.stripplot(ax=axes, x='unit_id', order=sort_ids, y='dSpikes',data=data,size=1)
+axes.axhline(0,lw=1,color='k',alpha=0.4,zorder=100)
 
 for i,collection in enumerate(plot.collections):
     collection.set_facecolor(colors[i])
 
-axes[0,0].set_ylim(-45.45)
-axes[0,0].set_ylabel('∆spikes')
-axes[0,0].set_xlabel('')
-axes[0,0].set_xticks([])
-sns.despine(ax=axes[0,0],bottom=True)
+axes.set_ylim(-45.45)
+axes.set_ylabel('∆spikes')
+axes.set_xlabel('units')
+axes.set_xticks([])
+sns.despine(ax=axes,bottom=True)
 
-# fig, axes = plt.subplots(nrows=3,ncols=2,figsize=[5,5],gridspec_kw=gkw)
-# fig, axes = plt.subplots(ncols=2, figsize=[11,3], gridspec_kw=gkw)
 
-# get corresponding indices to unit_ids
-all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
-sort_ix = [all_ids.index(id) for id in sort_ids]
-stim_inds = StimsDf.groupby(('stim_id','opto')).get_group((stim_id,'red')).index
-
-im = axes[1,0].matshow(dSpikes[sort_ix,:][:,stim_inds].T,vmin=-15,vmax=15,cmap='PiYG')
-cbar = fig.colorbar(im, cax=axes[1,1], shrink=0.75,label='∆spikes')
-
-axes[1,0].set_xlabel('units')
-axes[1,0].set_ylabel('stim #')
-axes[1,0].set_aspect('auto')
-
-axes[0,1].remove()
-fig.tight_layout()
-fig.savefig('/home/georg/Desktop/ciss/stripandpepper.png',dpi=331)
+xlim = axes.get_xlim()
 
 
 
+# %% looking into the issue of wrong sorting (as bruno pointed out)
 
+K = StatsDf.groupby(('stim_id','area')).get_group((1,'STR'))
+K.index = K.unit_id
 
+T = Dfm.groupby(('stim_id','opto')).get_group((1,'red')).groupby('unit_id').mean()
 
+dSpikes_mean = T.loc[K.index,'dSpikes'] # the mean dSpikes
 
+K['dSpikes_mean'] = dSpikes_mean
 
+for i,id in enumerate(sort_ids):
+    y = dSpikes_mean.loc[id]
+    axes.plot([i],[y],'.',color=colors[i],markersize=5,alpha=0.5,zorder=100)
 
+axes.set_xlim(xlim)
 
-
-
+fig.savefig('/home/georg/Desktop/ciss/stripplot_new.png',dpi=331)
 
 """
  
@@ -390,7 +429,7 @@ def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
         sort_inds = order 
 
     ext = (r.times[0],r.times[-1],0,nUnits)
-    im = axes.matshow(r_avgs.T[sort_inds,:],cmap='viridis',origin='bottom',extent=ext,vmin=-1,vmax=3)
+    im = axes.matshow(r_avgs.T[sort_inds,:],cmap='viridis',origin='bottom',extent=ext,vmin=-1,vmax=2.5)
     axes.set_aspect('auto')
 
     return axes, im, r_avgs, sort_inds
@@ -430,8 +469,8 @@ for ax in axes[0,:]:
     add_epoch(ax,vpl_stim,color='firebrick', linewidth=0.5)
     add_epoch(ax,vpl_stim,color='firebrick',above=True, linewidth=1)
 
-# add_epoch(axes[0,1],da_stim,color='darkcyan',above=True)
-# add_epoch(axes[0,2],da_stim,color='darkcyan',above=True)
+add_epoch(axes[0,1],da_stim,color='darkcyan',above=True)
+add_epoch(axes[0,2],da_stim,color='darkcyan',above=True)
 
 
 for ax in axes[0,:]:
@@ -448,11 +487,11 @@ axes[0,1].set_yticklabels([])
 axes[0,2].set_yticklabels([])
 
 for ax in axes[0,:]:
-    ax.set_xlim(-0.0,1)
+    ax.set_xlim(-0.25,2.75)
 
 fig.tight_layout()
 # fig.subplots_adjust(wspace=0.01,hspace=0.3)
-# fig.savefig('/home/georg/Desktop/ciss/avg_activity.png',dpi=331)    
+# fig.savefig('/home/georg/Desktop/ciss/avg_activity_2.png',dpi=331)    
 
 
 
@@ -483,4 +522,62 @@ mid_val = (cs[-1,:] - cs[0,:])/2
 mid_inds = sp.argmin(sp.absolute(cs - mid_val[sp.newaxis,:]),axis=0)
 sort_inds = sp.argsort(mid_inds)[::-1]
 all_inds = all_inds[sort_inds]
+
+
+# # %% STRIP PLOT 
+# area = 'STR'
+# stim_id = 1
+# sort_ids = Dfm.groupby(('area','unit_id')).mean().loc[area,'dSpikes'].sort_values().index
+
+# # get corresponding indices to unit_ids
+# all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
+# sort_ix = [all_ids.index(id) for id in sort_ids]
+
+# nUnits = len(sort_ids)
+
+# StatsDf['downmod'] = sp.logical_and(StatsDf['m'] < 0, StatsDf['p'] < 0.05)
+# stats = StatsDf.groupby(('area','stim_id')).get_group((area,stim_id))
+# stats['colors'] = 'gray'
+
+# stats.loc[stats['upmod']==True,'colors'] = 'deepskyblue'
+# stats.loc[stats['downmod']==True,'colors'] = '#d62728'
+# stats.index = stats['unit_id']
+# colors = [stats.loc[id,'colors'] for id in sort_ids]
+
+# data = Dfm.groupby(('area','stim_id','opto')).get_group((area,stim_id,'red'))
+
+
+# gkw = dict(width_ratios=(1,0.025))
+# fig, axes = plt.subplots(nrows=2,ncols=2,figsize=[9,3],gridspec_kw=gkw)
+
+# plot = sns.stripplot(ax=axes[0,0], x='unit_id', order=sort_ids, y='dSpikes',data=data,size=1)
+# # axes.axhline(0,lw=1,linestyle=':',color='k',alpha=0.5)
+
+# for i,collection in enumerate(plot.collections):
+#     collection.set_facecolor(colors[i])
+
+# axes[0,0].set_ylim(-45.45)
+# axes[0,0].set_ylabel('∆spikes')
+# axes[0,0].set_xlabel('')
+# axes[0,0].set_xticks([])
+# sns.despine(ax=axes[0,0],bottom=True)
+
+# # fig, axes = plt.subplots(nrows=3,ncols=2,figsize=[5,5],gridspec_kw=gkw)
+# # fig, axes = plt.subplots(ncols=2, figsize=[11,3], gridspec_kw=gkw)
+
+# # get corresponding indices to unit_ids
+# all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
+# sort_ix = [all_ids.index(id) for id in sort_ids]
+# stim_inds = StimsDf.groupby(('stim_id','opto')).get_group((stim_id,'red')).index
+
+# im = axes[1,0].matshow(dSpikes[sort_ix,:][:,stim_inds].T,vmin=-15,vmax=15,cmap='PiYG')
+# cbar = fig.colorbar(im, cax=axes[1,1], shrink=0.75,label='∆spikes')
+
+# axes[1,0].set_xlabel('units')
+# axes[1,0].set_ylabel('stim #')
+# axes[1,0].set_aspect('auto')
+
+# axes[0,1].remove()
+# fig.tight_layout()
+# fig.savefig('/home/georg/Desktop/ciss/stripandpepper.png',dpi=331)
 
