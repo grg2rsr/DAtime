@@ -74,7 +74,7 @@ for j in range(nTrials):
 area = 'STR'
 
 StatsDf = pd.read_csv(bin_file.with_suffix('.stim_stats.csv'))
-unit_ids = StatsDf.groupby(('area','sig')).get_group((area,True))['unit_id'].unique()
+unit_ids = StatsDf.groupby(('area','stim_id','sig')).get_group((area,stim_k,True))['unit_id'].unique()
 
 # get corresponding indices to unit_ids
 all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]

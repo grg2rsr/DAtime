@@ -88,7 +88,7 @@ vpl_stim, = select(Segs[stim_inds[0]].epochs,'VPL_stims')
 area = 'STR'
 
 StatsDf = pd.read_csv(bin_file.with_suffix('.stim_stats.csv'))
-unit_ids = StatsDf.groupby(('area','sig')).get_group((area,True))['unit_id'].unique()
+unit_ids = StatsDf.groupby(('area','stim_id','sig')).get_group((area,stim_k,True))['unit_id'].unique()
 
 # get corresponding indices to unit_ids
 all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
@@ -335,6 +335,8 @@ fig.savefig('/home/georg/Desktop/ciss/decoding_result_full.png',dpi=331)
 for ax in axes[0,:]:
     ax.set_ylim(0.42,1.65)
     ax.set_xlim(0.42,1.65)
+
+
 
 axes[0,0].plot(tt_dc,tt_dc,':',alpha=0.35,color='w')
 axes[0,1].plot(tt_dc,tt_dc,':',alpha=0.35,color='w')

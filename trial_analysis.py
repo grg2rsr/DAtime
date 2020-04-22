@@ -436,7 +436,7 @@ def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
 
 # gather indices
 stim_id = 1
-area = 'STR'
+area = 'CX'
 stim_inds = StimsDf.groupby(('opto','stim_id')).get_group(('red',stim_id)).index
 stim_inds_opto = StimsDf.groupby(('opto','stim_id')).get_group(('both',stim_id)).index
 
@@ -491,7 +491,7 @@ for ax in axes[0,:]:
 
 fig.tight_layout()
 # fig.subplots_adjust(wspace=0.01,hspace=0.3)
-# fig.savefig('/home/georg/Desktop/ciss/avg_activity_2.png',dpi=331)    
+fig.savefig('/home/georg/Desktop/ciss/avg_activity_CX.png',dpi=331)    
 
 
 

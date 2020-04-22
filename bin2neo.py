@@ -156,7 +156,6 @@ axes.axhline(sep,linestyle=':', color='k')
 fig.tight_layout()
 fig.savefig('/home/georg/Desktop/ciss/depth_hist_colored.png',dpi=331)
 
-
 # %% write this to the spiketrains
 for i,St in enumerate(SpikeTrains):
     St.annotate(depth=Df.iloc[i]['depth'])
