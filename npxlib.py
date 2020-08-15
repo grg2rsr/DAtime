@@ -123,8 +123,7 @@ def read_spiketrains_2(ks2, fs, t_stop):
     return Sts
 
 def get_TTL_onsets(bin_path, channel_id, chunk_size=60000):
-    """ extracts trigger TTL onset times from a .glx file 
-    stores indices (not times) as ints in a as .ttl file """
+    """ extracts trigger TTL onset times from a .glx file  """
 
     print(" - processing TTL event detection in file: ",bin_path)
     print(" - channel: ", channel_id)
@@ -136,10 +135,8 @@ def get_TTL_onsets(bin_path, channel_id, chunk_size=60000):
     fs = R.meta['imSampRate']
     nSamples = R.meta['fileTimeSecs']* fs
 
-    onset_inds_fname = bin_path.with_suffix('.ttl.npy')
     onset_inds = []
 
-    # for i in tqdm(range(100)):
     for i in tqdm(range(int(nSamples/chunk_size))):
         start = i * chunk_size
         stop = start + chunk_size 
@@ -154,8 +151,9 @@ def get_TTL_onsets(bin_path, channel_id, chunk_size=60000):
 
     print(" - " + str(len(onset_inds)) + " events detected")
 
-    sp.save(onset_inds_fname,onset_inds)
-
+    onset_times = onset_inds / fs
+    return onset_times
+    
 def read_stim_file(path):
     stims = pd.read_csv(path ,delimiter=',')
     stims['dur'] = stims['dur'] * 1000

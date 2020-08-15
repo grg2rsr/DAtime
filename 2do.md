@@ -1,21 +1,35 @@
 # code orga
 
-git this at some point rather soon
+make a UnitInfo and TrialInfo DataFrame
 
-dumping the rates of the entire recording
-- requires rate estimation parameters
-- is this ever needed?
+UnitInfo can hold a path to where the data will be found
 
-dumping the sliced rates around the stim times
-- requires either the recodgin and the parameters
-- or the sliced rates and the times
-- latter makes more sense, as this is a two step process
-- estimate rate, and slice 
-- slice takes times
+# idea on how to extent this to the future without dying of data overload
+construct segment from UnitInfo. UnitInfo can be groupbyed, and holds path 
+to the data, UnitInfo will also hold info about animal etc
 
-~ stimulus efficiency
-computing pre and post times
-getting sig mod
-everything that is single metric
-Q: does stim history influence next response?
+UnitInfo
+animalid, unitid, ks2 stuff, depth, area
 
+# relative to bin file
+folder: extraced_data
+subfolders: unit_{id}
+subfolders:
+
+spiketrain.neo
+fratez.neo
+
+subfolder: trial_sliced
+subfolders 1,2,3,4,5,6 ... 
+with each
+spiketrain.neo
+fratesz.neo
+
+# then, gathering
+
+
+# new approach
+bin2neo
+makes 1 large master neo file, and puts out UnitsInfo and TrialsInfo
+neo file has all spiketrains and epochs blabla attached
+think about which parts here are specific to this experiment to isolate them
