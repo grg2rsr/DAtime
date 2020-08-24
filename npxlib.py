@@ -33,9 +33,11 @@ def read_phy(phy_output_folder):
             'cluster_ContamPct','cluster_Amplitude']
     phy = {}
     for key in keys:
-        fname = phy_output_folder.joinpath(key).with_suffix('.tsv')
-        phy[key] = pd.read_csv(fname,delimiter='\t')
-
+        try:
+            fname = phy_output_folder.joinpath(key).with_suffix('.tsv')
+            phy[key] = pd.read_csv(fname,delimiter='\t')
+        except:
+            pass
     return phy
 
 def read_kilosort2(kilosort_folder):

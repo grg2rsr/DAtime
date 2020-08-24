@@ -53,8 +53,12 @@ mpl.rcParams['figure.dpi'] = 331
  
 """
 # %% 
-folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0")
+# folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0")
 # folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
+
+path = "/media/georg/the_trunk/data/2020-06-20_1a_JJP-00875_wt/stim1_g0_resort/stim1_g0_t0.imec.ap.bin"
+bin_path = Path(path)
+folder = bin_path.parent
 
 os.chdir(folder)
 import importlib
@@ -62,13 +66,14 @@ import params
 importlib.reload(params)
 
 # bin and ks2
-bin_path = folder.joinpath(params.dat_path)
+# bin_path = folder.joinpath(params.dat_path)
 Reader = glx.Reader(bin_path)
 
 kilosort_folder = folder
 ks2 = npxlib.read_kilosort2(kilosort_folder)
 phy = npxlib.read_phy(kilosort_folder)
-CInfo = phy['cluster_info']
+# CInfo = phy['cluster_info']
+CInfo = phy['cluster_KSLabel']
 
 meta_path = Path(bin_path).with_suffix('.meta')
 meta_data = glx.read_meta_data(meta_path)
@@ -100,7 +105,10 @@ for i,St in enumerate(SpikeTrains):
 # the rest is definitely not interesting (for first pass data analysis)
 # Df will have all the info
 
+# Df = CInfo.loc[CInfo.group != 'noise'].groupby('KSLabel').get_group('good')
+
 Df = CInfo.loc[CInfo.group != 'noise'].groupby('KSLabel').get_group('good')
+
 good_ids = Df['id']
 
 # subset
