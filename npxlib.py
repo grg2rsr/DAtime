@@ -6,6 +6,7 @@ import matplotlib as mpl
 
 # plt.style.use('default')
 # mpl.rcParams['figure.dpi']=166
+import scipy as sp
 
 import sys,os
 from tqdm import tqdm
@@ -27,10 +28,11 @@ from pathlib import Path
 |__|      \______/  |__| \__|  \______|_______/
 
 """
-def read_phy(phy_output_folder):
+def read_phy(phy_output_folder, keys=None):
     """ reads the output of phy """
-    keys = ['cluster_KSLabel','cluster_info','cluster_group',
-            'cluster_ContamPct','cluster_Amplitude']
+    if keys is None:
+        keys = ['cluster_KSLabel','cluster_info','cluster_group',
+                'cluster_ContamPct','cluster_Amplitude']
     phy = {}
     for key in keys:
         try:
@@ -40,20 +42,19 @@ def read_phy(phy_output_folder):
             pass
     return phy
 
-def read_kilosort2(kilosort_folder):
+def read_kilosort2(kilosort_folder, keys=None):
     """ reads the kilsosort things and returns a dict"""
-    keys = ['whitening_mat_inv','whitening_mat','templates_ind','templates',
-            'template_features','template_feature_ind','spike_times',
-            'spike_templates','spike_clusters','similar_templates',
-            'pc_features','pc_feature_ind','channel_map','amplitudes']
+    if keys is None:
+        keys = ['whitening_mat_inv','whitening_mat','templates_ind','templates',
+                'template_features','template_feature_ind','spike_times',
+                'spike_templates','spike_clusters','similar_templates',
+                'pc_features','pc_feature_ind','channel_map','amplitudes']
     ks2 = {}
     for key in keys:
         fname = kilosort_folder.joinpath(key).with_suffix('.npy')
         ks2[key] = sp.load(fname)
 
     return ks2
-
-
 
 def glx2asig(bin_path,t_start,t_stop):
     """ reads a .bin file created by spikeglx into a neo AnalogSignal """
@@ -120,6 +121,7 @@ def read_spiketrains_2(ks2, fs, t_stop):
     for i, template_id in enumerate(tqdm(templates_unique)):
         times = spike_times[sp.where(Templates == template_id)[0]]
         St = neo.core.SpikeTrain(times, t_stop=t_stop)
+        St.annotate(id=template_id)
         Sts.append(St)
         
     return Sts

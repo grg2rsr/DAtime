@@ -12,10 +12,12 @@
 
 # %%
 %matplotlib qt5
+%load_ext autoreload
+%autoreload 2
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-mpl.rcParams['figure.dpi'] = 331
+mpl.rcParams['figure.dpi'] = 166
 import seaborn as sns
 
 import sys,os
@@ -33,11 +35,16 @@ import elephant as ele
 import quantities as pq
 
 from helpers import *
+import utils
 
-# %% 
+# %% file dialog
+bin_path = utils.get_file_dialog()
 
-folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0/")
-# folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
+# %% previous
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-20_1a_JJP-00875_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+folder = bin_path.parent
+
+# %%
 
 os.chdir(folder)
 import analysis_params
@@ -69,9 +76,14 @@ StimsDf = pd.read_csv(stim_path, index_col=0, delimiter=',')
  
 """
 # %% 
+TrialInfo = pd.read_csv(folder / "TrialInfo.csv")
+UnitInfo = pd.read_csv(folder / "UnitInfo.csv")
 
-nTrials = len(Segs)
-nUnits = len(Segs[0].spiketrains)
+# %%
+nTrials = TrialInfo.shape[0]
+nUnits = UnitInfo.shape[0]
+
+extra_offset = 0.1 *pq.s
 
 # gather pre spikes
 nSpikes = sp.zeros((nUnits,nTrials,2)) # last axis is pre, post
@@ -79,13 +91,13 @@ for i in tqdm(range(nTrials),desc="counting spikes"):
     seg = Segs[i]
     try:
         vpl_stim, = select(seg.epochs, 'VPL_stims')
-        t_post = vpl_stim.times[-1] + vpl_stim.durations[-1]
+        t_post = vpl_stim.times[-1] + vpl_stim.durations[-1] + extra_offset
     except:
         t_post = 0 * pq.s # this calculates the diff through DA only stim
 
     # pre
-    seg_sliced = seg.time_slice(-1*pq.s, 0*pq.s)
-    nSpikes[:,i,0] = [len(st) for st in seg_sliced.spiketrains]
+    seg_sliced = seg.time_slice(-1*pq.s, 0*pq.s - extra_offset)
+    nSpikes[:,i,0] = [len(st)/0.9 for st in seg_sliced.spiketrains]
 
     # post
     seg_sliced = seg.time_slice(t_post, t_post + 2*pq.s)
@@ -258,6 +270,8 @@ for stim_id in pd.unique(Dfm['stim_id']):
 Df_pvalues = pd.DataFrame(Df_pvalues)
 Df_params = pd.DataFrame(Df_params)
 
+StatsDf['area'] = UnitInfo['area']
+
 # %% distilling this to df stats
 key  = 'when[T.post]'
 StatsDf = pd.concat([Df_params[['unit','stim_id',key]],Df_pvalues[key]],axis=1)
@@ -276,7 +290,7 @@ StatsDf['upmod'] = sp.logical_and(StatsDf['sig'].values,(StatsDf['m'] > 0).value
 out_path = bin_file.with_suffix('.stim_stats.csv')
 StatsDf.to_csv(out_path)
 
-StatsDf.groupby(('stim_id','area')).sum()
+StatsDf.groupby(['stim_id','area']).sum()
 
 # %% or load
 
@@ -296,14 +310,14 @@ StatsDf = pd.read_csv(out_path)
 
 # %% connected dots plot
 fig, axes = plt.subplots(ncols=3,sharey=True,figsize=[2,5])
-stim_id = 1
+stim_id = 0
 nStims  = pd.unique(StimsDf['stim_id']).shape[0]
 
 for k, stim_id in enumerate(range(nStims)):
 
     data = Dfm.groupby(['stim_id','opto']).get_group((stim_id,'red'))
 
-    sig_mod_unit_ids = pd.unique(StatsDf.groupby(('stim_id','upmod')).get_group((stim_id,True))['unit_id'])
+    sig_mod_unit_ids = pd.unique(StatsDf.groupby(['stim_id','upmod']).get_group((stim_id,True))['unit_id'])
 
     d = data[['unit_id','pre','post']].groupby('unit_id').mean()
     for i,row in d.iterrows():
@@ -318,15 +332,15 @@ for k, stim_id in enumerate(range(nStims)):
 fig.tight_layout()
 
 # %%
-stim_id = 1
+stim_id = 0
 # adding area info to Dfm to make my life easier
 for i,row in StatsDf.groupby('stim_id').get_group(stim_id).iterrows():
     Dfm.loc[Dfm['unit_id'] == row['unit_id'],'area'] = row['area']
 
 # %% NEW STRIP PLOT 
 area = 'STR'
-stim_id = 1
-sort_ids = Dfm.groupby(('opto','stim_id','area')).get_group(('red',stim_id,area)).groupby('unit_id').mean()['dSpikes'].sort_values().index
+stim_id = 0
+sort_ids = Dfm.groupby(['opto','stim_id','area']).get_group(('red',stim_id,area)).groupby('unit_id').mean()['dSpikes'].sort_values().index
 
 # get corresponding indices to unit_ids
 all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
@@ -335,7 +349,7 @@ sort_ix = [all_ids.index(id) for id in sort_ids]
 nUnits = len(sort_ids)
 
 StatsDf['downmod'] = sp.logical_and(StatsDf['m'] < 0, StatsDf['p'] < 0.05)
-stats = StatsDf.groupby(('area','stim_id')).get_group((area,stim_id))
+stats = StatsDf.groupby(['area','stim_id']).get_group((area,stim_id))
 stats['colors'] = 'gray'
 
 cmap = plt.get_cmap('PiYG')
@@ -345,7 +359,7 @@ stats.loc[stats['downmod']==True,'colors'] = '#1f77b4'
 stats.index = stats['unit_id']
 colors = [stats.loc[id,'colors'] for id in sort_ids]
 
-data = Dfm.groupby(('area','stim_id','opto')).get_group((area,stim_id,'red'))
+data = Dfm.groupby(['area','stim_id','opto']).get_group((area,stim_id,'red'))
 
 # gkw = dict(width_ratios=(1,0.025))
 fig, axes = plt.subplots(figsize=[6,3])
@@ -369,10 +383,10 @@ xlim = axes.get_xlim()
 
 # %% looking into the issue of wrong sorting (as bruno pointed out)
 
-K = StatsDf.groupby(('stim_id','area')).get_group((1,'STR'))
+K = StatsDf.groupby(['stim_id','area']).get_group((1,'STR'))
 K.index = K.unit_id
 
-T = Dfm.groupby(('stim_id','opto')).get_group((1,'red')).groupby('unit_id').mean()
+T = Dfm.groupby(['stim_id','opto']).get_group((1,'red')).groupby('unit_id').mean()
 
 dSpikes_mean = T.loc[K.index,'dSpikes'] # the mean dSpikes
 
@@ -384,7 +398,7 @@ for i,id in enumerate(sort_ids):
 
 axes.set_xlim(xlim)
 
-fig.savefig('/home/georg/Desktop/ciss/stripplot_new.png',dpi=331)
+# fig.savefig('/home/georg/Desktop/ciss/stripplot_new.png',dpi=331)
 
 """
  
@@ -408,7 +422,7 @@ for i,j in enumerate(ix):
     Rates[:,i] = Segs[j].analogsignals
 
 # %% splitting
-import colorcet as cc
+# import colorcet as cc
 # plotting helper
 def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
     """ takes the Rates array with all info and plots only the subset """
@@ -436,11 +450,11 @@ def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
 
 # gather indices
 stim_id = 1
-area = 'CX'
-stim_inds = StimsDf.groupby(('opto','stim_id')).get_group(('red',stim_id)).index
-stim_inds_opto = StimsDf.groupby(('opto','stim_id')).get_group(('both',stim_id)).index
+area = 'STR'
+stim_inds = StimsDf.groupby(['opto','stim_id']).get_group(('red',stim_id)).index
+stim_inds_opto = StimsDf.groupby(['opto','stim_id']).get_group(('both',stim_id)).index
 
-sig_mod_unit_ids = StatsDf.groupby(('area','stim_id','sig')).get_group((area,stim_id,True))['unit_id'].unique()
+sig_mod_unit_ids = StatsDf.groupby(['area','stim_id','sig']).get_group((area,stim_id,True))['unit_id'].unique()
 
 # get corresponding indices to unit_ids
 all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
@@ -491,7 +505,7 @@ for ax in axes[0,:]:
 
 fig.tight_layout()
 # fig.subplots_adjust(wspace=0.01,hspace=0.3)
-fig.savefig('/home/georg/Desktop/ciss/avg_activity_CX.png',dpi=331)    
+# fig.savefig('/home/georg/Desktop/ciss/avg_activity_CX.png',dpi=331)    
 
 
 

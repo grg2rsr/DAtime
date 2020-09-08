@@ -18,6 +18,8 @@ slices
 
 # %%
 %matplotlib qt5
+%load_ext autoreload
+%autoreload 2
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -40,12 +42,19 @@ import quantities as pq
 # import npxlib
 
 plt.style.use('default')
-mpl.rcParams['figure.dpi'] = 331
+mpl.rcParams['figure.dpi'] = 166
 
-# %% read 
-folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0/")
+# %% file dialog
+bin_path = utils.get_file_dialog()
+
+# %% previous
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-20_1a_JJP-00875_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+folder = bin_path.parent
+
+# folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0/")
 # folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
 
+# %%
 os.chdir(folder)
 
 import analysis_params
@@ -102,7 +111,7 @@ nUnits = len(Seg.analogsignals)
 nTrials = len(Seg.events[0])
 
 Segs = []
-for i,t in enumerate(tqdm(Seg.events[0].times[:5])):
+for i,t in enumerate(tqdm(Seg.events[0].times)):
     seg = Seg.time_slice(t+pre,t+post)
     seg.annotate(trial_index=i)
 
@@ -129,30 +138,32 @@ for i,t in enumerate(tqdm(Seg.events[0].times[:5])):
 
     Segs.append(seg)
 
-# %% this writing part will now have to be 2dim
-nUnits = len(Segs[0].spiketrains)
-
-for i,Seg in enumerate(tqdm(Segs)):
-    for j in range(nUnits):
-        unit_id = Seg.spiketrains[j].annotations['id']
-        out_folder = folder.joinpath("neo_data","trial_"+str(i+1),str(unit_id))
-        os.makedirs(out_folder,exist_ok=True)
-
-        # make new segment and fill it
-        seg = neo.core.Segment()
-        seg.spiketrains = Seg.spiketrains[j]
-        seg.analogsignals = Seg.analogsignals[j]
-        seg.epochs = Seg.epochs
-        seg.events = Seg.events
-        with open(out_folder/"segment.neo",'wb') as fH:
-            pickle.dump(seg,fH)
-
-
 # write to disk
-# with open(neo_path.with_suffix('.neo.zfr.sliced'), 'wb') as fH:
-#     print("writing sliced Segs ... ")
-#     pickle.dump(Segs,fH)
-#     print("... done")
+with open(neo_path.with_suffix('.neo.zfr.sliced'), 'wb') as fH:
+    print("writing sliced Segs ... ")
+    pickle.dump(Segs,fH)
+    print("... done")
+
+# %% this writing part will now have to be 2dim
+# nUnits = len(Segs[0].spiketrains)
+
+# for i,Seg in enumerate(tqdm(Segs)):
+#     for j in range(nUnits):
+#         unit_id = Seg.spiketrains[j].annotations['id']
+#         out_folder = folder.joinpath("neo_data","trial_"+str(i+1),str(unit_id))
+#         os.makedirs(out_folder,exist_ok=True)
+
+#         # make new segment and fill it
+#         seg = neo.core.Segment()
+#         seg.spiketrains = Seg.spiketrains[j]
+#         seg.analogsignals = Seg.analogsignals[j]
+#         seg.epochs = Seg.epochs
+#         seg.events = Seg.events
+#         with open(out_folder/"segment.neo",'wb') as fH:
+#             pickle.dump(seg,fH)
+
+
+
 
 
 # is never needed?
@@ -191,7 +202,7 @@ with open(neo_path.with_suffix('.neo.zfr.sliced'), 'rb') as fH:
  
 """
 # %% inspect a segment
-i = 7
+i = 6
 window = (-1,3) * pq.s
 t = Seg.events[0].times[i]
 t_slice = window + t
@@ -222,7 +233,7 @@ t = Seg.events[0].times[i]
 t_slice = window + t
 s = Seg.time_slice(*t_slice)
 
-j = 1 # unit
+j = 2 # unit
 asig = s.analogsignals[j]
 st = s.spiketrains[j]
 

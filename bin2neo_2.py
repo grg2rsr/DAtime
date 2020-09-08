@@ -19,6 +19,9 @@ as each units annotations (redundant though)
 
 # %%
 %matplotlib qt5
+%load_ext autoreload
+%autoreload 2
+import importlib
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -39,9 +42,12 @@ import spikeglx as glx
 import quantities as pq
 
 import npxlib
+import utils
+
 
 plt.style.use('default')
-mpl.rcParams['figure.dpi'] = 331
+# mpl.rcParams['figure.dpi'] = 331
+mpl.rcParams['figure.dpi'] = 166
 
 """
  
@@ -53,58 +59,32 @@ mpl.rcParams['figure.dpi'] = 331
                         
  
 """
-# %% 
-folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0")
-# folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
+# %% file dialog
+bin_path = utils.get_file_dialog()
 
-os.chdir(folder)
-import importlib
+# %% previous
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-20_1a_JJP-00875_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+
+# %% take care of the correct paths and read phy / kilosort output
+# get phy params file
+folder = bin_path.parent
+os.chdir(folder / "phyfiles")
 import params
 importlib.reload(params)
+os.chdir(folder)
 
 # glx
-bin_path = folder.joinpath(params.dat_path)
+# bin_path = folder / params.dat_path
+# don't take the CAR
+# bin_path = bin_path.parent / Path(bin_path.name.split('.')[0]+'.imec.ap.bin')
 Reader = glx.Reader(bin_path)
 
 # ks2
-kilosort_folder = folder
-ks2 = npxlib.read_kilosort2(kilosort_folder)
+kilosort_folder = folder / "phyfiles"
+ks2 = npxlib.read_kilosort2(kilosort_folder, keys=['spike_clusters','spike_times'])
 phy = npxlib.read_phy(kilosort_folder)
-CInfo = phy['cluster_info']
-
-meta_path = Path(bin_path).with_suffix('.meta')
-meta_data = glx.read_meta_data(meta_path)
-
-fs = meta_data['imSampRate'] * pq.Hz
-t_stop = meta_data['fileTimeSecs'] * pq.s
-
-# get all spiketrains
-SpikeTrains = npxlib.read_spiketrains_2(ks2,fs=fs,t_stop=t_stop)
-print("initial number of detected cells by Ks2: ", len(SpikeTrains))
-
-# attach ks2 IDs to each unit for redundancy
-for i,St in enumerate(SpikeTrains):
-    St.annotations = dict(CInfo.loc[i])
 
 # %%
-"""
- 
-       _                 
-   ___| |_ ___  _ __ ___ 
-  / __| __/ _ \| '__/ _ \
-  \__ \ || (_) | | |  __/
-  |___/\__\___/|_|  \___|
-                         
- 
-"""
-# is never needed?
-# for i,St in enumerate(tqdm(SpikeTrains,desc="dumping spiketrains")):
-#     unit_folder = folder/"neo_data"/str(St.annotations['id'])
-#     os.makedirs(unit_folder,exist_ok=True)
-#     with open(unit_folder/"spiketrain.neo",'wb') as fH:
-#         pickle.dump(St,fH)
-
-
 """
  
    _   _       _ _   ___        __       
@@ -113,36 +93,87 @@ for i,St in enumerate(SpikeTrains):
   | |_| | | | | | |_ | || | | |  _| (_) |
    \___/|_| |_|_|\__|___|_| |_|_|  \___/ 
                                          
- 
+
+UnitInfo hold information regarding the sorted units
 """
-# %%
 
-UnitInfo = copy(CInfo)
-
-# firing rate 
-UnitInfo.firing_rate = sp.array([float(fr.split(' ')[0]) for fr in CInfo.firing_rate])
+UnitInfo = phy['cluster_info']
 
 # manual selection
 UnitInfo['Label'] = UnitInfo['KSLabel']
+
+# transfer noise label - overwrites good KSLabel
 UnitInfo.loc[UnitInfo['group'] == 'noise','Label'] = 'noise'
 
-# depth
-# kilosort stores inverse
-UnitInfo['depth'] = UnitInfo['depth'] - 4000 
+# ulitmately discard all non-good and noise
+UnitInfo = UnitInfo.groupby('Label').get_group('good')
 
-# determine sep
+# %% depth related
+# KS stores depth in an inverted way. 0 is lowest site, 4000 is highest.
+# goal is to have an intuitive DV representation, with 0 being at brain surface
+UnitInfo['depth'] = UnitInfo['depth'] - 4000
+
+plt.hist(UnitInfo.depth, bins=20,orientation='horizontal')
+
+# %%
+os.chdir(folder)
 import analysis_params
-importlib.reload(analysis_params)
-sep = analysis_params.depth_sep
 
-# add it - FIXME this is recording specific
-# this could be replaced with a more automated function that relates
-# penetration coordinates and depth with label -> IBL
+sep = analysis_params.depth_sep
+lines = ["depth_sep = %d" % sep]
+
+# fname = folder / "analysis_params.py"
+# if not fname.exists():
+#     with open(fname, 'w') as fH:
+#         fH.writelines(lines)
+
+# add to UnitInfo
 UnitInfo['area'] = 'CX'
 UnitInfo.loc[UnitInfo['depth'] < sep,'area'] = 'STR'
 
-UnitInfo.to_csv(folder/'UnitInfo.csv')
+# %% two colored histogram
+fig, axes = plt.subplots(figsize=[2.915, 4.325])
+bins = sp.arange(-4000,0,200)
+axes.hist(UnitInfo['depth'],bins=bins,orientation='horizontal',edgecolor='k',linewidth=1)
+axes.hist(UnitInfo.groupby('area').get_group('CX')['depth'],bins=bins,orientation='horizontal',color='gray')
+axes.hist(UnitInfo.groupby('area').get_group('STR')['depth'],bins=bins,orientation='horizontal',color='#1f77b4')
 
+axes.set_ylabel("depth on probe (µm)")
+axes.set_xlabel("count")
+axes.set_title("unit count by depth")
+sns.despine(fig)
+
+axes.axhline(sep,linestyle=':', color='k')
+fig.tight_layout()
+os.makedirs(folder / "plots", exist_ok=True)
+fig.savefig(folder / "plots" / 'depth_hist_colored.png',dpi=331)
+
+# %% spiketrains
+
+meta_path = Path(bin_path).with_suffix('.meta')
+meta_data = glx.read_meta_data(meta_path)
+
+fs = meta_data['imSampRate'] * pq.Hz
+t_stop = meta_data['fileTimeSecs'] * pq.s
+
+# this returns spiketrains of all cells present in the recording
+SpikeTrains = npxlib.read_spiketrains_2(ks2,fs=fs,t_stop=t_stop)
+print("initial number of detected cells by Ks2: ", len(SpikeTrains))
+
+# filter to only those in UnitInfo
+ids = [St.annotations['id'] for St in SpikeTrains]
+good_ids = UnitInfo['id']
+ix = [ids.index(id) for id in good_ids]
+SpikeTrains = [SpikeTrains[i] for i in ix]
+
+# add UnitInfo to each SpikeTrain (for redundancy)
+# attach ks2 IDs to each unit
+for i,St in enumerate(SpikeTrains):
+    unit_id = St.annotations['id']
+    info = UnitInfo.loc[UnitInfo['id'] == unit_id].iloc[0].to_dict()
+    St.annotations = info
+
+UnitInfo.to_csv(folder/'UnitInfo.csv')
 
 """
  
@@ -155,6 +186,8 @@ UnitInfo.to_csv(folder/'UnitInfo.csv')
  
 """
 # %% 
+import analysis_params
+
 # read stims
 """ nomenclature fix here: a map maps stim id to stim params """
 
@@ -179,10 +212,9 @@ if os.path.exists(ttl_path):
 else:
     ttl_channel = analysis_params.ttl_channel
     trig_times = npxlib.get_TTL_onsets(bin_path,ttl_channel)
-    
+
     trig_fname = bin_path.with_suffix('.ttl.npy')
     sp.save(trig_fname, trig_times)
-
 
 # adding timepoints to TrialInfo
 TrialInfo['t'] = trig_times
@@ -202,6 +234,7 @@ TrialInfo.to_csv(folder/"TrialInfo.csv")
                                                   |___/ 
  
 """
+import analysis_params
 
 Seg = neo.core.Segment()
 
@@ -301,9 +334,9 @@ with open(bin_path.with_suffix('.neo'), 'rb') as fH:
 # %% two colored histogram
 fig, axes = plt.subplots(figsize=[2.915, 4.325])
 bins = sp.arange(-4000,0,100)
-axes.hist(Df['depth'],bins=bins,orientation='horizontal',edgecolor='k',linewidth=2)
-axes.hist(Df.groupby('area').get_group('CX')['depth'],bins=bins,orientation='horizontal',color='gray')
-axes.hist(Df.groupby('area').get_group('STR')['depth'],bins=bins,orientation='horizontal',color='#1f77b4')
+axes.hist(UnitInfo['depth'],bins=bins,orientation='horizontal',edgecolor='k',linewidth=2)
+axes.hist(UnitInfo.groupby('area').get_group('CX')['depth'],bins=bins,orientation='horizontal',color='gray')
+axes.hist(UnitInfo.groupby('area').get_group('STR')['depth'],bins=bins,orientation='horizontal',color='#1f77b4')
 
 axes.set_ylabel("depth on probe (µm)")
 axes.set_xlabel("count")
@@ -312,7 +345,7 @@ sns.despine(fig)
 
 axes.axhline(sep,linestyle=':', color='k')
 fig.tight_layout()
-fig.savefig('/home/georg/Desktop/ciss/depth_hist_colored.png',dpi=331)
+# fig.savefig('/home/georg/Desktop/ciss/depth_hist_colored.png',dpi=331)
 
 # %%
 """
@@ -414,4 +447,5 @@ sns.despine(fig=fig)
 axes.set_ylabel('depth (µm)')
 axes.set_xlabel('time (s)')
 fig.tight_layout()
-fig.savefig('spiketrains_depth.png',dpi=331)
+# fig.savefig('spiketrains_depth.png',dpi=331)
+# %%
