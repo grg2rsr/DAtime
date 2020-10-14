@@ -42,9 +42,23 @@ bin_path = utils.get_file_dialog()
 
 # %% previous
 bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-20_1a_JJP-00875_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-22_3b_JJP-00869_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-22_4a_JJP-00871_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-23_4b_JJP-00871_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-25_7a_JJP-00874_dh/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-26_7b_JJP-00874_dh/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-26_8a_JJP-00876_dh/stim1_g0/stim1_g0_t0.imec.ap.bin")
+
+# from here 1.0
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-27_8b_JJP-00876_dh/stim1_g0/stim1_g0_imec0/stim1_g0_t0.imec0.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-29_10a_JJP-00870_dh/stim2_g0/stim2_g0_imec0/stim2_g0_t0.imec0.ap.bin")
+
+# local 
+# bin_path = Path("/media/georg/data/batch10/2020-06-27_8b_JJP-00876_dh/stim1_g0/stim1_g0_imec0/stim1_g0_t0.imec0.ap.bin")
+
 folder = bin_path.parent
 
-# %%
+# %% read data
 
 os.chdir(folder)
 import analysis_params
@@ -61,29 +75,29 @@ with open(path,'rb') as fH:
 stim_path = folder / analysis_params.stim_file
 stim_map_path = folder / analysis_params.stim_map_file
 
-StimMap = pd.read_csv(stim_map_path, delimiter=',')
-StimsDf = pd.read_csv(stim_path, index_col=0, delimiter=',')
-
-
-"""
- 
-                         _   
-    ___ ___  _   _ _ __ | |_ 
-   / __/ _ \| | | | '_ \| __|
-  | (_| (_) | |_| | | | | |_ 
-   \___\___/ \__,_|_| |_|\__|
-                             
- 
-"""
-# %% 
-TrialInfo = pd.read_csv(folder / "TrialInfo.csv")
+TrialInfo = pd.read_csv(folder / "TrialInfo.csv",index_col=0)
 UnitInfo = pd.read_csv(folder / "UnitInfo.csv")
 
-# %%
+"""
+ 
+ #### ########  ######## ##    ## ######## #### ######## ##    ##    ##     ##  #######  ########      ######  ######## ##       ##        ######  
+  ##  ##     ## ##       ###   ##    ##     ##  ##        ##  ##     ###   ### ##     ## ##     ##    ##    ## ##       ##       ##       ##    ## 
+  ##  ##     ## ##       ####  ##    ##     ##  ##         ####      #### #### ##     ## ##     ##    ##       ##       ##       ##       ##       
+  ##  ##     ## ######   ## ## ##    ##     ##  ######      ##       ## ### ## ##     ## ##     ##    ##       ######   ##       ##        ######  
+  ##  ##     ## ##       ##  ####    ##     ##  ##          ##       ##     ## ##     ## ##     ##    ##       ##       ##       ##             ## 
+  ##  ##     ## ##       ##   ###    ##     ##  ##          ##       ##     ## ##     ## ##     ##    ##    ## ##       ##       ##       ##    ## 
+ #### ########  ######## ##    ##    ##    #### ##          ##       ##     ##  #######  ########      ######  ######## ######## ########  ######  
+ 
+"""
+# %% seg version with out analogsignals for faster slicing
+
+
+# %% by counting spikes pre / post
+
 nTrials = TrialInfo.shape[0]
 nUnits = UnitInfo.shape[0]
 
-extra_offset = 0.1 *pq.s
+extra_offset = 0.1 *pq.s # to avoid counting the artifact
 
 # gather pre spikes
 nSpikes = sp.zeros((nUnits,nTrials,2)) # last axis is pre, post
@@ -100,72 +114,28 @@ for i in tqdm(range(nTrials),desc="counting spikes"):
     nSpikes[:,i,0] = [len(st)/0.9 for st in seg_sliced.spiketrains]
 
     # post
-    seg_sliced = seg.time_slice(t_post, t_post + 2*pq.s)
-    nSpikes[:,i,1] = [len(st)/2 for st in seg_sliced.spiketrains]
+    # seg_sliced = seg.time_slice(t_post + extra_offset, t_post + 2*pq.s + extra_offset)
+    # nSpikes[:,i,1] = [len(st)/2 for st in seg_sliced.spiketrains]
 
-    # seg_sliced = seg.time_slice(t_post + 0.1*pq.s, t_post + 2.9*pq.s)
-    # nSpikes[:,i,1] = [len(st)/2.8 for st in seg_sliced.spiketrains]
+    seg_sliced = seg.time_slice(t_post + 0.1*pq.s, t_post + 2.9*pq.s)
+    nSpikes[:,i,1] = [len(st)/2.8 for st in seg_sliced.spiketrains]
+
+dSpikes = nSpikes[:,:,1] - nSpikes[:,:,0]
 
 # save the result
 out_path = bin_file.with_suffix('.pre_post_spikes.npy')
 sp.save(out_path,nSpikes)
 
 
-# %% ISI check 
-nTrials = len(Segs)
-nUnits = len(Segs[0].spiketrains)
-
-# gather pre spikes
-Dists = sp.zeros((nUnits,nTrials,2)) # last axis is pre, post
-for i in tqdm(range(5),desc="ISI calculations"): # over nTrials
-    seg = Segs[i]
-    try:
-        vpl_stim, = select(seg.epochs, 'VPL_stims')
-        t_post = vpl_stim.times[-1] + vpl_stim.durations[-1]
-    except:
-        t_post = 0 * pq.s # this calculates the diff through DA only stim
-
-    seg.time_slice(-1*pq.s,0*pq.s).spiketrains
-
-
-
-
-
-# %% or: more unbiased: euclid dists
-nTrials = len(Segs)
-nUnits = len(Segs[0].spiketrains)
-
-# gather pre spikes
-Dists = sp.zeros((nUnits,nTrials,2)) # last axis is pre, post
-for i in tqdm(range(5),desc="euclid dists"): # over nTrials
-    seg = Segs[i]
-    try:
-        vpl_stim, = select(seg.epochs, 'VPL_stims')
-        t_post = vpl_stim.times[-1] + vpl_stim.durations[-1] + 0.1*pqs
-    except:
-        t_post = 0 * pq.s # this calculates the diff through DA only stim
-
-    # euclidean distances
-    asigs_pre_pre = sp.stack([asig.time_slice(-1*pq.s, -0.5*pq.s).magnitude for asig in seg.analogsignals],axis=0)[:,:,0]
-    asigs_pre = sp.stack([asig.time_slice(-0.5*pq.s, 0*pq.s).magnitude for asig in seg.analogsignals],axis=0)[:,:,0]
-    asigs_post = sp.stack([asig.time_slice(t_post, t_post + 0.5*pq.s).magnitude for asig in seg.analogsignals],axis=0)[:,:,0]
-   
-    Dists[:,i,0] = sp.sqrt(sp.sum((asigs_pre_pre - asigs_pre)**2,axis=1))
-    Dists[:,i,1] = sp.sqrt(sp.sum((asigs_post - asigs_pre)**2,axis=1))
-
-
-# save the result
-# out_path = bin_file.with_suffix('.eDists.npy')
-# sp.save(out_path,Dists)
-
 """
  
-       _                  
-    __| | ___  _ __   ___ 
-   / _` |/ _ \| '_ \ / _ \
-  | (_| | (_) | | | |  __/
-   \__,_|\___/|_| |_|\___|
-                          
+ ########   #######  ##    ## ######## 
+ ##     ## ##     ## ###   ## ##       
+ ##     ## ##     ## ####  ## ##       
+ ##     ## ##     ## ## ## ## ######   
+ ##     ## ##     ## ##  #### ##       
+ ##     ## ##     ## ##   ### ##       
+ ########   #######  ##    ## ######## 
  
 """
 
@@ -174,45 +144,58 @@ for i in tqdm(range(5),desc="euclid dists"): # over nTrials
 
 
 
+
+
+
+
 """
  
-   _                 _ 
-  | | ___   __ _  __| |
-  | |/ _ \ / _` |/ _` |
-  | | (_) | (_| | (_| |
-  |_|\___/ \__,_|\__,_|
-                       
+ ##        #######     ###    ########  
+ ##       ##     ##   ## ##   ##     ## 
+ ##       ##     ##  ##   ##  ##     ## 
+ ##       ##     ## ##     ## ##     ## 
+ ##       ##     ## ######### ##     ## 
+ ##       ##     ## ##     ## ##     ## 
+ ########  #######  ##     ## ########  
  
 """
+
 # %%
 path = bin_file.with_suffix('.pre_post_spikes.npy')
-# path = bin_file.with_suffix('.eDists.npy')
 nSpikes = sp.load(path)
 dSpikes = nSpikes[:,:,1] - nSpikes[:,:,0]
 
+# %% dSpikes vis
+fig, axes = plt.subplots(figsize=[5,5])
+sort_inds = sp.argsort(sp.average(dSpikes,axis=1))
+axes.matshow(dSpikes[sort_inds,:],cmap='PiYG',vmin=-3,vmax=3)
+axes.set_xlabel('trial #')
+axes.set_ylabel('units')
 
+# %%
 """
  
-             __                            _   
-   _ __ ___ / _| ___  _ __ _ __ ___   __ _| |_ 
-  | '__/ _ \ |_ / _ \| '__| '_ ` _ \ / _` | __|
-  | | |  __/  _| (_) | |  | | | | | | (_| | |_ 
-  |_|  \___|_|  \___/|_|  |_| |_| |_|\__,_|\__|
-                                               
- 
+ ########  ######## ########  #######  ########  ##     ##    ###    ######## 
+ ##     ## ##       ##       ##     ## ##     ## ###   ###   ## ##      ##    
+ ##     ## ##       ##       ##     ## ##     ## #### ####  ##   ##     ##    
+ ########  ######   ######   ##     ## ########  ## ### ## ##     ##    ##    
+ ##   ##   ##       ##       ##     ## ##   ##   ##     ## #########    ##    
+ ##    ##  ##       ##       ##     ## ##    ##  ##     ## ##     ##    ##    
+ ##     ## ######## ##        #######  ##     ## ##     ## ##     ##    ##    
+
+melting dataset for linear regression w statsmodels 
 """
 
-# %% 
 nTrials = len(Segs)
 unit_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
 
 Data = pd.DataFrame(dSpikes.T,columns=unit_ids,index=range(nTrials))
 
 # lagged prev reg
-# StimsDf['prev_blue'] = sp.roll(StimsDf['blue'],-1)
+# TrialInfo['prev_blue'] = sp.roll(TrialInfo['blue'],-1)
 
-Df = pd.concat([StimsDf,Data],axis=1)
-Dfm = pd.melt(Df,id_vars=StimsDf.columns,var_name='unit_id',value_name='dSpikes')
+Df = pd.concat([TrialInfo,Data],axis=1)
+Dfm = pd.melt(Df,id_vars=TrialInfo.columns,var_name='unit_id',value_name='dSpikes')
 Dfm['stim_id'] = pd.Categorical(Dfm['stim_id'])
 
 Dfm['pre'] = pd.melt(pd.DataFrame(nSpikes[:,:,0].T))['value']
@@ -226,17 +209,20 @@ cat = pd.Categorical(Dfmm['when'])
 cat = cat.reorder_categories(['pre','post'])
 Dfmm['when'] = cat
 
-"""
- 
-       _        _                           _      _     
-   ___| |_ __ _| |_ ___ _ __ ___   ___   __| | ___| |___ 
-  / __| __/ _` | __/ __| '_ ` _ \ / _ \ / _` |/ _ \ / __|
-  \__ \ || (_| | |_\__ \ | | | | | (_) | (_| |  __/ \__ \
-  |___/\__\__,_|\__|___/_| |_| |_|\___/ \__,_|\___|_|___/
-                                                         
- 
-"""
+
 # %% linear regression for finding how many dSpikes per stim class
+"""
+ 
+  ######  ########    ###    ########  ######  ##     ##  #######  ########  ######## ##        ######  
+ ##    ##    ##      ## ##      ##    ##    ## ###   ### ##     ## ##     ## ##       ##       ##    ## 
+ ##          ##     ##   ##     ##    ##       #### #### ##     ## ##     ## ##       ##       ##       
+  ######     ##    ##     ##    ##     ######  ## ### ## ##     ## ##     ## ######   ##        ######  
+       ##    ##    #########    ##          ## ##     ## ##     ## ##     ## ##       ##             ## 
+ ##    ##    ##    ##     ##    ##    ##    ## ##     ## ##     ## ##     ## ##       ##       ##    ## 
+  ######     ##    ##     ##    ##     ######  ##     ##  #######  ########  ######## ########  ######  
+ 
+"""
+
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import patsy
@@ -270,6 +256,7 @@ for stim_id in pd.unique(Dfm['stim_id']):
 Df_pvalues = pd.DataFrame(Df_pvalues)
 Df_params = pd.DataFrame(Df_params)
 
+# this is dangerous but possible bc the order is preserved
 StatsDf['area'] = UnitInfo['area']
 
 # %% distilling this to df stats
@@ -292,6 +279,24 @@ StatsDf.to_csv(out_path)
 
 StatsDf.groupby(['stim_id','area']).sum()
 
+# %% to check - go into this via inspection
+# StatsDf
+unit_id = 1536
+stim_id = 0
+
+stim_inds = TrialInfo.groupby('stim_id').get_group(stim_id).index
+
+from helpers import select
+Sts = []
+for i in stim_inds:
+    Sts.append(select(Segs[i].spiketrains, stim_id, key='id')[0])
+
+# plot raster
+fig, axes = plt.subplots()
+ysep = 0.1
+for i,st in enumerate(Sts):
+    axes.plot(st.times.magnitude - i*0.00005, sp.ones(st.times.shape[0]) + i*ysep,'.',color='k')
+
 # %% or load
 
 out_path = bin_file.with_suffix('.stim_stats.csv')
@@ -311,7 +316,7 @@ StatsDf = pd.read_csv(out_path)
 # %% connected dots plot
 fig, axes = plt.subplots(ncols=3,sharey=True,figsize=[2,5])
 stim_id = 0
-nStims  = pd.unique(StimsDf['stim_id']).shape[0]
+nStims  = pd.unique(TrialInfo['stim_id']).shape[0]
 
 for k, stim_id in enumerate(range(nStims)):
 
@@ -336,6 +341,13 @@ stim_id = 0
 # adding area info to Dfm to make my life easier
 for i,row in StatsDf.groupby('stim_id').get_group(stim_id).iterrows():
     Dfm.loc[Dfm['unit_id'] == row['unit_id'],'area'] = row['area']
+
+# %% 
+for i, row in UnitInfo.iterrows():
+    Dfm.loc[Dfm['unit_id'] == row['id'],'area'] = row['area']
+
+# for i,row in StatsDf.groupby('stim_id').get_group(stim_id).iterrows():
+    # Dfm.loc[Dfm['unit_id'] == row['unit_id'],'area'] = row['area']
 
 # %% NEW STRIP PLOT 
 area = 'STR'
@@ -424,6 +436,7 @@ for i,j in enumerate(ix):
 # %% splitting
 # import colorcet as cc
 # plotting helper
+
 def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
     """ takes the Rates array with all info and plots only the subset """
     Rates_ = Rates[:,stim_inds]
@@ -443,7 +456,7 @@ def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
         sort_inds = order 
 
     ext = (r.times[0],r.times[-1],0,nUnits)
-    im = axes.matshow(r_avgs.T[sort_inds,:],cmap='viridis',origin='bottom',extent=ext,vmin=-1,vmax=2.5)
+    im = axes.matshow(r_avgs.T[sort_inds,:],cmap='viridis',origin='lower',extent=ext,vmin=-1,vmax=2.5)
     axes.set_aspect('auto')
 
     return axes, im, r_avgs, sort_inds
@@ -451,8 +464,8 @@ def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
 # gather indices
 stim_id = 1
 area = 'STR'
-stim_inds = StimsDf.groupby(['opto','stim_id']).get_group(('red',stim_id)).index
-stim_inds_opto = StimsDf.groupby(['opto','stim_id']).get_group(('both',stim_id)).index
+stim_inds = TrialInfo.groupby(['opto','stim_id']).get_group(('red',stim_id)).index
+stim_inds_opto = TrialInfo.groupby(['opto','stim_id']).get_group(('both',stim_id)).index
 
 sig_mod_unit_ids = StatsDf.groupby(['area','stim_id','sig']).get_group((area,stim_id,True))['unit_id'].unique()
 
@@ -472,7 +485,7 @@ fig.colorbar(im,cax=axes[1,1],orientation='horizontal',label="firing rate(z)", s
 r_avgs_d = r_avgs_da - r_avgs_vpl
 r = Rates[0,0]
 ext = (r.times[0],r.times[-1],0,r_avgs_d.shape[1])
-im = axes[0,2].matshow(r_avgs_d.T[order,:],cmap='PiYG',extent=ext,origin='bottom',vmin=-1,vmax=1)
+im = axes[0,2].matshow(r_avgs_d.T[order,:],cmap='PiYG',extent=ext,origin='lower',vmin=-1,vmax=1)
 axes[0,2].set_aspect('auto')
 fig.colorbar(im,cax=axes[1,2],orientation='horizontal',label="difference", shrink=0.8)
 
@@ -505,7 +518,10 @@ for ax in axes[0,:]:
 
 fig.tight_layout()
 # fig.subplots_adjust(wspace=0.01,hspace=0.3)
-# fig.savefig('/home/georg/Desktop/ciss/avg_activity_CX.png',dpi=331)    
+fname = 'avg_activity_stim_%i_'%stim_id + area+'.png'
+plot_dir = bin_path.parent / 'plots'
+os.makedirs(plot_dir, exist_ok=True)
+fig.savefig(plot_dir / fname ,dpi=331)
 
 
 
@@ -582,7 +598,7 @@ all_inds = all_inds[sort_inds]
 # # get corresponding indices to unit_ids
 # all_ids = [st.annotations['id'] for st in Segs[0].spiketrains]
 # sort_ix = [all_ids.index(id) for id in sort_ids]
-# stim_inds = StimsDf.groupby(('stim_id','opto')).get_group((stim_id,'red')).index
+# stim_inds = TrialInfo.groupby(('stim_id','opto')).get_group((stim_id,'red')).index
 
 # im = axes[1,0].matshow(dSpikes[sort_ix,:][:,stim_inds].T,vmin=-15,vmax=15,cmap='PiYG')
 # cbar = fig.colorbar(im, cax=axes[1,1], shrink=0.75,label='∆spikes')
@@ -595,3 +611,47 @@ all_inds = all_inds[sort_inds]
 # fig.tight_layout()
 # fig.savefig('/home/georg/Desktop/ciss/stripandpepper.png',dpi=331)
 
+
+# %% ISI check 
+nTrials = len(Segs)
+nUnits = len(Segs[0].spiketrains)
+
+# gather pre spikes
+Dists = sp.zeros((nUnits,nTrials,2)) # last axis is pre, post
+for i in tqdm(range(5),desc="ISI calculations"): # over nTrials
+    seg = Segs[i]
+    try:
+        vpl_stim, = select(seg.epochs, 'VPL_stims')
+        t_post = vpl_stim.times[-1] + vpl_stim.durations[-1]
+    except:
+        t_post = 0 * pq.s # this calculates the diff through DA only stim
+
+    seg.time_slice(-1*pq.s,0*pq.s).spiketrains
+
+
+# %% or: more unbiased: euclid dists
+nTrials = len(Segs)
+nUnits = len(Segs[0].spiketrains)
+
+# gather pre spikes
+Dists = sp.zeros((nUnits,nTrials,2)) # last axis is pre, post
+for i in tqdm(range(5),desc="euclid dists"): # over nTrials
+    seg = Segs[i]
+    try:
+        vpl_stim, = select(seg.epochs, 'VPL_stims')
+        t_post = vpl_stim.times[-1] + vpl_stim.durations[-1] + 0.1*pqs
+    except:
+        t_post = 0 * pq.s # this calculates the diff through DA only stim
+
+    # euclidean distances
+    asigs_pre_pre = sp.stack([asig.time_slice(-1*pq.s, -0.5*pq.s).magnitude for asig in seg.analogsignals],axis=0)[:,:,0]
+    asigs_pre = sp.stack([asig.time_slice(-0.5*pq.s, 0*pq.s).magnitude for asig in seg.analogsignals],axis=0)[:,:,0]
+    asigs_post = sp.stack([asig.time_slice(t_post, t_post + 0.5*pq.s).magnitude for asig in seg.analogsignals],axis=0)[:,:,0]
+   
+    Dists[:,i,0] = sp.sqrt(sp.sum((asigs_pre_pre - asigs_pre)**2,axis=1))
+    Dists[:,i,1] = sp.sqrt(sp.sum((asigs_post - asigs_pre)**2,axis=1))
+
+
+# save the result
+# out_path = bin_file.with_suffix('.eDists.npy')
+# sp.save(out_path,Dists)

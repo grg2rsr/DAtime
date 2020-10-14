@@ -64,6 +64,13 @@ bin_path = utils.get_file_dialog()
 
 # %% previous
 bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-20_1a_JJP-00875_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-22_3b_JJP-00869_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-22_4a_JJP-00871_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-23_4b_JJP-00871_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-25_7a_JJP-00874_dh/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-26_7b_JJP-00874_dh/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-26_8a_JJP-00876_dh/stim1_g0/stim1_g0_t0.imec.ap.bin")
+
 
 # %% take care of the correct paths and read phy / kilosort output
 # get phy params file
@@ -109,41 +116,53 @@ UnitInfo.loc[UnitInfo['group'] == 'noise','Label'] = 'noise'
 UnitInfo = UnitInfo.groupby('Label').get_group('good')
 
 # %% depth related
-# KS stores depth in an inverted way. 0 is lowest site, 4000 is highest.
+# KS stores depth as 0 is lowest site, 4000 is highest.
 # goal is to have an intuitive DV representation, with 0 being at brain surface
 UnitInfo['depth'] = UnitInfo['depth'] - 4000
 
-plt.hist(UnitInfo.depth, bins=20,orientation='horizontal')
+# %% plot
+fig, axes = plt.subplots(figsize=[3,5])
+values = UnitInfo.depth.values
+for v in values:
+    axes.axhline(v,alpha=0.25,color='k')
+axes.hist(values, bins=20,orientation='horizontal')
+axes.set_ylabel('DV depth [um]')
+axes.set_xlabel('count')
+fig.tight_layout()
 
-# %%
+# %% assign areas
 os.chdir(folder)
 import analysis_params
 
-sep = analysis_params.depth_sep
-lines = ["depth_sep = %d" % sep]
-
-# fname = folder / "analysis_params.py"
-# if not fname.exists():
-#     with open(fname, 'w') as fH:
-#         fH.writelines(lines)
+upper_sep = analysis_params.depth_sep
 
 # add to UnitInfo
 UnitInfo['area'] = 'CX'
-UnitInfo.loc[UnitInfo['depth'] < sep,'area'] = 'STR'
+UnitInfo.loc[UnitInfo['depth'] < upper_sep,'area'] = 'STR'
 
-# %% two colored histogram
+# if lower sep is set, set those to sth else
+if hasattr(analysis_params,'depth_sep_2'):
+    lower_sep = analysis_params.depth_sep_2
+    UnitInfo.loc[UnitInfo['depth'] < lower_sep,'area'] = '?'
+else:
+    lower_sep = None
+
+# %% colored histogram
 fig, axes = plt.subplots(figsize=[2.915, 4.325])
 bins = sp.arange(-4000,0,200)
-axes.hist(UnitInfo['depth'],bins=bins,orientation='horizontal',edgecolor='k',linewidth=1)
-axes.hist(UnitInfo.groupby('area').get_group('CX')['depth'],bins=bins,orientation='horizontal',color='gray')
-axes.hist(UnitInfo.groupby('area').get_group('STR')['depth'],bins=bins,orientation='horizontal',color='#1f77b4')
+# axes.hist(UnitInfo['depth'],bins=bins,orientation='horizontal',edgecolor='k',linewidth=1)
+axes.hist(UnitInfo.groupby('area').get_group('CX')['depth'],bins=bins,orientation='horizontal',color='gray',alpha=0.75)
+axes.hist(UnitInfo.groupby('area').get_group('STR')['depth'],bins=bins,orientation='horizontal',color='#1f77b4',alpha=0.75)
 
-axes.set_ylabel("depth on probe (µm)")
+axes.set_ylabel("DV depth (µm)")
 axes.set_xlabel("count")
 axes.set_title("unit count by depth")
 sns.despine(fig)
 
-axes.axhline(sep,linestyle=':', color='k')
+axes.axhline(upper_sep,linestyle=':', color='k')
+if lower_sep is not None:
+    axes.axhline(lower_sep,linestyle=':', color='k')
+
 fig.tight_layout()
 os.makedirs(folder / "plots", exist_ok=True)
 fig.savefig(folder / "plots" / 'depth_hist_colored.png',dpi=331)
@@ -343,7 +362,7 @@ axes.set_xlabel("count")
 axes.set_title("unit count by depth")
 sns.despine(fig)
 
-axes.axhline(sep,linestyle=':', color='k')
+# axes.axhline(sep,linestyle=':', color='k')
 fig.tight_layout()
 # fig.savefig('/home/georg/Desktop/ciss/depth_hist_colored.png',dpi=331)
 

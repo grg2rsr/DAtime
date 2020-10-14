@@ -49,10 +49,18 @@ bin_path = utils.get_file_dialog()
 
 # %% previous
 bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-20_1a_JJP-00875_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
-folder = bin_path.parent
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-22_3b_JJP-00869_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-22_4a_JJP-00871_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-23_4b_JJP-00871_wt/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-25_7a_JJP-00874_dh/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-26_7b_JJP-00874_dh/stim1_g0/stim1_g0_t0.imec.ap.bin")
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-26_8a_JJP-00876_dh/stim1_g0/stim1_g0_t0.imec.ap.bin")
 
-# folder = Path("/home/georg/data/2019-12-03_JP1355_GR_full_awake_2/stim3_g0/")
-# folder = Path("/home/georg/data/2020-03-04_GR_JP2111_full/stim1_g0")
+# from here 1.0
+bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-27_8b_JJP-00876_dh/stim1_g0/stim1_g0_imec0/stim1_g0_t0.imec0.ap.bin")
+# bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-29_10a_JJP-00870_dh/stim2_g0/stim2_g0_imec0/stim2_g0_t0.imec0.ap.bin")
+
+folder = bin_path.parent
 
 # %%
 os.chdir(folder)
@@ -75,10 +83,9 @@ sigma = analysis_params.k_sigma * pq.ms
 kernel = ele.kernels.GaussianKernel(sigma=sigma)
 from CausalAlphaKernel import CausalAlphaKernel
 kernel = CausalAlphaKernel(sigma)
-fr_opts = dict(sampling_period=5*pq.ms, kernel=kernel)
 
 for St in tqdm(Seg.spiketrains):
-    frate = ele.statistics.instantaneous_rate(St,**fr_opts)
+    frate = ele.statistics.instantaneous_rate(St, sampling_period=5*pq.ms, kernel=kernel)
     frate_z = ele.signal_processing.zscore(frate)
     frate_z.annotate(id=St.annotations['id'])
     frate_z.t_start = frate_z.t_start.rescale('s')
@@ -87,7 +94,7 @@ for St in tqdm(Seg.spiketrains):
 with open(neo_path.with_suffix('.neo.zfr'), 'wb') as fH:
     print("writing Seg with firing rates ... ")
     pickle.dump(Seg,fH)
-    print("...done")
+print("...done")
 
 """
  
@@ -111,7 +118,7 @@ nUnits = len(Seg.analogsignals)
 nTrials = len(Seg.events[0])
 
 Segs = []
-for i,t in enumerate(tqdm(Seg.events[0].times)):
+for i,t in enumerate(tqdm(Seg.events[0].times, desc='slicing')):
     seg = Seg.time_slice(t+pre,t+post)
     seg.annotate(trial_index=i)
 
@@ -138,35 +145,11 @@ for i,t in enumerate(tqdm(Seg.events[0].times)):
 
     Segs.append(seg)
 
-# write to disk
 with open(neo_path.with_suffix('.neo.zfr.sliced'), 'wb') as fH:
     print("writing sliced Segs ... ")
     pickle.dump(Segs,fH)
     print("... done")
 
-# %% this writing part will now have to be 2dim
-# nUnits = len(Segs[0].spiketrains)
-
-# for i,Seg in enumerate(tqdm(Segs)):
-#     for j in range(nUnits):
-#         unit_id = Seg.spiketrains[j].annotations['id']
-#         out_folder = folder.joinpath("neo_data","trial_"+str(i+1),str(unit_id))
-#         os.makedirs(out_folder,exist_ok=True)
-
-#         # make new segment and fill it
-#         seg = neo.core.Segment()
-#         seg.spiketrains = Seg.spiketrains[j]
-#         seg.analogsignals = Seg.analogsignals[j]
-#         seg.epochs = Seg.epochs
-#         seg.events = Seg.events
-#         with open(out_folder/"segment.neo",'wb') as fH:
-#             pickle.dump(seg,fH)
-
-
-
-
-
-# is never needed?
 
 
 """
@@ -202,13 +185,15 @@ with open(neo_path.with_suffix('.neo.zfr.sliced'), 'rb') as fH:
  
 """
 # %% inspect a segment
-i = 6
+i = 0
 window = (-1,3) * pq.s
 t = Seg.events[0].times[i]
 t_slice = window + t
 s = Seg.time_slice(*t_slice)
 
 fig, axes = plt.subplots()
+axes.axvline(t)
+axes.axvline(t-0.978*pq.s+0.25*pq.s)
 
 ysep = 0.5*pq.dimensionless
 for i,asig in enumerate(s.analogsignals):
@@ -242,7 +227,6 @@ axes.plot(asig.times,asig)
 for t in st.times:
     axes.axvline(t,color='k',alpha=0.5,lw=1)
 
-
 # %% inspection
 
 nUnits = len(Segs[0].spiketrains)
@@ -268,5 +252,35 @@ for st in sts:
         plt.gca().axvline(t)
 
 
+# %% to check - go into this via inspection
+# StatsDf
 
+TrialInfo = pd.read_csv(folder / "TrialInfo.csv",index_col=0)
+UnitInfo = pd.read_csv(folder / "UnitInfo.csv")
+
+unit_id = 1536
+stim_id = 0
+
+stim_inds = TrialInfo.groupby('stim_id').get_group(stim_id).index
+
+from helpers import select
+Sts = []
+for i in stim_inds:
+    Sts.append(select(Segs[i].spiketrains, stim_id, key='id')[0])
+
+# plot raster
+fig, axes = plt.subplots()
+ysep = 0.1
+for i,st in enumerate(Sts):
+    axes.plot(st.times.magnitude, sp.ones(st.times.shape[0]) + i*ysep,'.',color='k')
+
+
+# %% averaging all firing rates to check clock alignment
+from helpers import average_asigs
+fr_avg = average_asigs(Seg.analogsignals)
+ds = 10
+fig, axes = plt.subplots()
+axes.plot(fr_avg.times[::ds],fr_avg[::ds,0])
+for t in Seg.events[0].times:
+    axes.axvline(t,color='k',alpha=0.5)
 # %%

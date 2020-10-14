@@ -46,7 +46,11 @@ path = "/media/georg/Elements/2020-06-27_8b_JJP-00876_dh/stim1_g0/stim1_g0_t0.ni
 bin_path = Path(path)
 def get_TTL_onsets10(bin_path, channel_id, chunk_size=6000):
 
+    # get metadata 
     meta = readMeta(bin_path)
+
+    # get sampling rate
+    fs = float(meta['niSampRate']) * pq.Hz
 
     dw = 0
     dLineList = [0] # the channel 
@@ -71,6 +75,6 @@ def get_TTL_onsets10(bin_path, channel_id, chunk_size=6000):
 
     print(" - " + str(len(onset_inds)) + " events detected")
 
-    onset_times = onset_inds / fs
+    onset_times = (onset_inds / fs).rescale('s')
     return onset_times
 

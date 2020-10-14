@@ -19,6 +19,8 @@ import spikeglx as glx
 import quantities as pq
 from pathlib import Path
 
+# from readSGLX import readMeta, SampRate, makeMemMapRaw, GainCorrectIM, GainCorrectNI, ExtractDigital
+import readSGLX as sglx
 """
  _______  __    __  .__   __.   ______     _______.
 |   ____||  |  |  | |  \ |  |  /      |   /       |
@@ -157,7 +159,76 @@ def get_TTL_onsets(bin_path, channel_id, chunk_size=60000):
 
     onset_times = onset_inds / fs
     return onset_times
-    
+
+def get_TTL_onsets10(bin_path, channel_id, chunk_size=6000):
+
+    # get metadata 
+    meta = sglx.readMeta(bin_path)
+
+    # get sampling rate
+    fs = float(meta['niSampRate']) * pq.Hz
+
+    dw = 0
+    dLineList = [0] # the channel 
+
+    Data_raw_mmap = sglx.makeMemMapRaw(bin_path, meta)
+
+    nSamples = float(meta['fileTimeSecs']) * fs
+
+    onset_inds = []
+
+    for i in tqdm(range(int(nSamples/chunk_size))):
+        start = i * chunk_size
+        stop = start + chunk_size 
+
+        chunk = sglx.ExtractDigital(Data_raw_mmap, start, stop, dw, dLineList, meta)
+        trig_ch = chunk.flatten()
+
+        inds = sp.where(sp.diff(trig_ch) == 1)[0]
+        if len(inds) > 0:
+            onset_inds.append(inds+start)
+    onset_inds = sp.array(onset_inds).flatten()
+
+    print(" - " + str(len(onset_inds)) + " events detected")
+
+    onset_times = (onset_inds / fs).rescale('s')
+    return onset_times
+
+# %%
+def get_TTL_onsets10b(ni_bin_path, channel_id=0):
+    # imec_meta = readMeta(ni_bin_path)
+    ni_meta = sglx.readMeta(ni_bin_path)
+
+    t_start = 0
+    t_stop = float(ni_meta['fileTimeSecs'])
+
+    dw = 0    
+    # Which lines within the digital word, zero-based
+    # Note that the SYNC line for PXI 3B is stored in line 6.
+    dLineList = [0,1,6]
+
+    fs_ni = float(ni_meta['niSampRate'])
+
+    firstSamp = int(fs_ni*t_start)
+    lastSamp = int(fs_ni*t_stop)-1
+
+    rawData = sglx.makeMemMapRaw(ni_bin_path, ni_meta)
+
+    # get digital data for the selected lines
+    digArray = sglx.ExtractDigital(rawData, firstSamp, lastSamp, dw, dLineList, ni_meta)
+    trig_ch = digArray[channel_id,:]
+
+    # get onset_inds
+    inds = sp.where(sp.diff(trig_ch) == 1)[0]
+
+    # convert to time
+    onset_times = (inds / (fs_ni*pq.Hz)).rescale('s')
+    return onset_times
+
+
+
+# %%
+
 def read_stim_file(path):
     stims = pd.read_csv(path ,delimiter=',')
     stims['dur'] = stims['dur'] * 1000
