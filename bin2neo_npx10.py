@@ -249,6 +249,17 @@ else:
     sp.save(trig_fname, trig_times)
 
 # %% find clock offset and drift
+"""
+ 
+ ##     ##    ###    ##    ## ##     ##    ###    ##           ######  ##        #######   ######  ##    ##    ######## #### ##     ## 
+ ###   ###   ## ##   ###   ## ##     ##   ## ##   ##          ##    ## ##       ##     ## ##    ## ##   ##     ##        ##   ##   ##  
+ #### ####  ##   ##  ####  ## ##     ##  ##   ##  ##          ##       ##       ##     ## ##       ##  ##      ##        ##    ## ##   
+ ## ### ## ##     ## ## ## ## ##     ## ##     ## ##          ##       ##       ##     ## ##       #####       ######    ##     ###    
+ ##     ## ######### ##  #### ##     ## ######### ##          ##       ##       ##     ## ##       ##  ##      ##        ##    ## ##   
+ ##     ## ##     ## ##   ### ##     ## ##     ## ##          ##    ## ##       ##     ## ##    ## ##   ##     ##        ##   ##   ##  
+ ##     ## ##     ## ##    ##  #######  ##     ## ########     ######  ########  #######   ######  ##    ##    ##       #### ##     ## 
+ 
+"""
 
 # helper
 def plt_raster_w_psth(SpikeTrains, t, pre=-0.5*pq.s, post=0.5*pq.s):
@@ -312,6 +323,7 @@ if hasattr(analysis_params,'ni_offset'):
     slope = analysis_params.ni_slope
     offset = analysis_params.ni_offset
     trig_times_corr = trig_times * slope + offset * pq.s
+    trig_times_corr = trig_times_corr - analysis_params.VPL_onset * pq.s
 
     # adding timepoints to TrialInfo
     TrialInfo['t'] = trig_times_corr
@@ -406,42 +418,6 @@ with open(bin_path.with_suffix('.neo'), 'wb') as fH:
 """
 
 
-# %% write a sliced variant
-os.chdir(bin_path.parent)
-import analysis_params
-
-pre = analysis_params.trial_pre * pq.s
-post = analysis_params.trial_post * pq.s
-
-nUnits = len(Seg.analogsignals)
-nTrials = len(Seg.events[0])
-
-Segs = []
-for i,t in enumerate(tqdm(Seg.events[0].times, desc='slicing')):
-    seg = Seg.time_slice(t+pre,t+post)
-    seg.annotate(trial_index=i)
-
-    spiketrains = []
-    for st in seg.spiketrains:
-        s = st.time_shift(-t)
-        s.t_start, s.t_stop = pre, post
-        spiketrains.append(s)
-    seg.spiketrains = spiketrains
-    
-    events = []
-    for event in seg.events:
-        events.append(event.time_shift(-t))
-    seg.events = events
-
-    epochs = []
-    for epoch in seg.epochs:
-        epochs.append(epoch.time_shift(-t))
-    seg.epochs = epochs
-
-    Segs.append(seg)
-
-
-
 # %%
 # some temp debug stuff
 
@@ -476,52 +452,6 @@ for epoch in seg.epochs:
     add_epoch(axes,epoch,color=color)
 
 
-
-# %%
-import readSGLX as sglx
-# def get_TTL_onsets10b(ni_bin_path, channel_id=0):
-    # imec_meta = readMeta(ni_bin_path)
-
-# stim triggers
-stim_name = bin_path.parent.parent.stem
-ttl_bin_path = bin_path.parent.parent / Path(stim_name+'_t0.nidq.bin')
-
-ni_bin_path = ttl_bin_path
-
-
-ni_meta = sglx.readMeta(ni_bin_path)
-imec_meta = readMeta(bin_path)
-
-t1_im = float(imec_meta['firstSample']) / float(imec_meta['imSampRate'])
-t1_ni = float(ni_meta['firstSample']) / float(ni_meta['niSampRate'])
-t1_im - t1_ni
-
-t_start = 0
-t_stop = float(ni_meta['fileTimeSecs'])
-
-dw = 0    
-# Which lines within the digital word, zero-based
-# Note that the SYNC line for PXI 3B is stored in line 6.
-dLineList = [0,1,6]
-
-fs_ni = float(ni_meta['niSampRate'])
-
-firstSamp = int(fs_ni*t_start)
-lastSamp = int(fs_ni*t_stop)-1
-
-rawData = sglx.makeMemMapRaw(ttl_bin_path, ni_meta)
-
-# get digital data for the selected lines
-digArray = sglx.ExtractDigital(rawData, firstSamp, lastSamp, dw, dLineList, ni_meta)
-channel_id = 0
-trig_ch = digArray[channel_id,:]
-
-# get onset_inds
-inds = sp.where(sp.diff(trig_ch) == 1)[0]
-
-# convert to time
-onset_times = (inds / (fs_ni*pq.Hz)).rescale('s')
-# return onset_times
 
 
 

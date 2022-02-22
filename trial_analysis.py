@@ -51,7 +51,7 @@ bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_1
 
 # from here 1.0
 bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-27_8b_JJP-00876_dh/stim1_g0/stim1_g0_imec0/stim1_g0_t0.imec0.ap.bin")
-bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-29_10a_JJP-00870_dh/stim2_g0/stim2_g0_imec0/stim2_g0_t0.imec0.ap.bin")
+# bin_path = Path("/media/georg/htcondor/shared-paton/georg/DAtime/data/batch_of_10/2020-06-29_10a_JJP-00870_dh/stim2_g0/stim2_g0_imec0/stim2_g0_t0.imec0.ap.bin")
 
 # local 
 # bin_path = Path("/media/georg/data/batch10/2020-06-27_8b_JJP-00876_dh/stim1_g0/stim1_g0_imec0/stim1_g0_t0.imec0.ap.bin")
@@ -89,8 +89,6 @@ UnitInfo = pd.read_csv(folder / "UnitInfo.csv")
  #### ########  ######## ##    ##    ##    #### ##          ##       ##     ##  #######  ########      ######  ######## ######## ########  ######  
  
 """
-# %% seg version with out analogsignals for faster slicing
-
 
 # %% by counting spikes pre / post
 
@@ -281,21 +279,21 @@ StatsDf.groupby(['stim_id','area']).sum()
 
 # %% to check - go into this via inspection
 # StatsDf
-unit_id = 1536
-stim_id = 0
+unit_id = 6
+stim_id = 1
 
 stim_inds = TrialInfo.groupby('stim_id').get_group(stim_id).index
 
 from helpers import select
 Sts = []
 for i in stim_inds:
-    Sts.append(select(Segs[i].spiketrains, stim_id, key='id')[0])
+    Sts.append(select(Segs[i].spiketrains, unit_id, key='id')[0])
 
 # plot raster
 fig, axes = plt.subplots()
 ysep = 0.1
 for i,st in enumerate(Sts):
-    axes.plot(st.times.magnitude - i*0.00005, sp.ones(st.times.shape[0]) + i*ysep,'.',color='k')
+    axes.plot(st.times.magnitude, sp.ones(st.times.shape[0]) + i*ysep,'.',color='k')
 
 # %% or load
 
@@ -337,17 +335,14 @@ for k, stim_id in enumerate(range(nStims)):
 fig.tight_layout()
 
 # %%
-stim_id = 0
-# adding area info to Dfm to make my life easier
-for i,row in StatsDf.groupby('stim_id').get_group(stim_id).iterrows():
-    Dfm.loc[Dfm['unit_id'] == row['unit_id'],'area'] = row['area']
+# stim_id = 0
+# # adding area info to Dfm to make my life easier
+# for i,row in StatsDf.groupby('stim_id').get_group(stim_id).iterrows():
+#     Dfm.loc[Dfm['unit_id'] == row['unit_id'],'area'] = row['area']
 
 # %% 
 for i, row in UnitInfo.iterrows():
     Dfm.loc[Dfm['unit_id'] == row['id'],'area'] = row['area']
-
-# for i,row in StatsDf.groupby('stim_id').get_group(stim_id).iterrows():
-    # Dfm.loc[Dfm['unit_id'] == row['unit_id'],'area'] = row['area']
 
 # %% NEW STRIP PLOT 
 area = 'STR'
@@ -462,7 +457,7 @@ def plot_average_rates(Rates, stim_inds, unit_inds, order=None, axes=None):
     return axes, im, r_avgs, sort_inds
 
 # gather indices
-stim_id = 1
+stim_id = 0
 area = 'STR'
 stim_inds = TrialInfo.groupby(['opto','stim_id']).get_group(('red',stim_id)).index
 stim_inds_opto = TrialInfo.groupby(['opto','stim_id']).get_group(('both',stim_id)).index

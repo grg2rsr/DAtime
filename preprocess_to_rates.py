@@ -283,4 +283,30 @@ fig, axes = plt.subplots()
 axes.plot(fr_avg.times[::ds],fr_avg[::ds,0])
 for t in Seg.events[0].times:
     axes.axvline(t,color='k',alpha=0.5)
+
+epochs = select(Seg.epochs,'VPL_stims',key='label')
+from helpers import add_stim
+for epoch in epochs:
+    add_stim(axes,epoch,DA=False)
+
+
+# %%
+TrialInfo = pd.read_csv(folder / "TrialInfo.csv",index_col=0)
+UnitInfo = pd.read_csv(folder / "UnitInfo.csv")
+
+unit_id = 0
+stim_id = 1
+
+times = TrialInfo.groupby('stim_id').get_group(stim_id)['t']
+
+St = Seg.spiketrains[unit_id]
+
+fig, axes = plt.subplots()
+ysep = 0.05
+
+for i,t in enumerate(times):
+    st = St.time_slice((t-2)*pq.s, (t+5)*pq.s)
+    axes.plot(st.times.magnitude - t, sp.ones(st.times.shape[0]) + i*ysep,'.',color='k')
+
+
 # %%
