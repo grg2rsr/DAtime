@@ -1,0 +1,13 @@
+# notes for teensy installation:
+
+https://www.pjrc.com/teensy/loader_linux.html
+
+get the 00-teensy.rules file, and copied them to # /etc/udev/rules.d/00-teensy.rules
+
+platformio check ini that works
+
+
+check this for 5V
+https://forum.pjrc.com/threads/57013-Teensy-3-6-unwanted-DAC-output
+
+https://electronics.stackexchange.com/questions/353008/scaling-dc-voltage-0v-3-3v-to-0v-5v
